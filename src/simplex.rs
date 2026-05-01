@@ -3,7 +3,7 @@ use crate::tableau::Tableau;
 
 #[derive(Debug, Clone)]
 pub enum SimplexStatus {
-    Optimal(Vec<(usize, Fraction)>),
+    Optimal(Number, Vec<(usize, Fraction)>),
     Infeasible,
     Unbounded,
 }

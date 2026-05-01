@@ -1,3 +1,5 @@
+use crate::fraction::Fraction;
+
 pub mod fraction;
 pub mod model;
 pub mod number;
@@ -6,11 +8,9 @@ pub mod tableau;
 
 pub fn solve(model: &model::Model) -> simplex::SimplexStatus {
     let mut tableau = tableau::Tableau::from_model(model);
-    println!("Initial tableau: {:?}", tableau);
 
     while !tableau.is_optimal() {
         if let Some((row, col)) = tableau.choose_standart_pivot() {
-            println!("Pivoting on row {}, col {}", row, col);
             tableau.pivot(row, col);
         } else {
             return simplex::SimplexStatus::Unbounded;
@@ -23,13 +23,16 @@ pub fn solve(model: &model::Model) -> simplex::SimplexStatus {
         }
     }
 
-    let vars = tableau
-        .basic_vars
-        .iter()
-        .zip(tableau.matrix.iter())
-        .filter(|&(&i, _)| i < model.variables.len())
-        .map(|(&i, row)| (i, row[0]))
+    let vars = (0..model.variables.len())
+        .map(|i| {
+            if let Some(row) = tableau.basic_vars.iter().position(|&j| j == i) {
+                return tableau.matrix[row][0];
+            } else {
+                return Fraction::from(0);
+            }
+        })
+        .enumerate()
         .collect::<Vec<_>>();
 
-    simplex::SimplexStatus::Optimal(vars)
+    simplex::SimplexStatus::Optimal(tableau.objective(), vars)
 }

@@ -33,15 +33,16 @@ impl Tableau {
         sum
     }
 
-    fn add_slack_variable(&mut self, constraint_index: usize) {
+    fn add_slack_variable(&mut self, coeff: impl Into<Fraction>, constraint_index: usize) {
+        let coeff = coeff.into();
         self.objective_coef.push(Number::from(0));
         for (i, row) in self.matrix.iter_mut().enumerate() {
-            let coeff = if i == constraint_index {
-                Fraction::from(1)
+            let c = if i == constraint_index {
+                coeff
             } else {
                 Fraction::from(0)
             };
-            row.push(coeff);
+            row.push(c);
         }
     }
 
@@ -49,7 +50,7 @@ impl Tableau {
         self.objective_coef.push(Number::from_m(-1));
         for (i, row) in self.matrix.iter_mut().enumerate() {
             let coeff = if i == constraint_index {
-                Fraction::from(-1)
+                Fraction::from(1)
             } else {
                 Fraction::from(0)
             };
@@ -69,11 +70,11 @@ impl Tableau {
 
         match constraint_type {
             ConstraintType::LessEq => {
-                self.add_slack_variable(self.matrix.len() - 1);
+                self.add_slack_variable(1, self.matrix.len() - 1);
                 self.basic_vars.push(self.objective_coef.len() - 1);
             }
             ConstraintType::GreaterEq => {
-                self.add_slack_variable(self.matrix.len() - 1);
+                self.add_slack_variable(-1, self.matrix.len() - 1);
                 self.add_surplus_variable(self.matrix.len() - 1);
                 self.basic_vars.push(self.objective_coef.len() - 1);
             }
@@ -85,8 +86,6 @@ impl Tableau {
     }
 
     pub fn from_model(model: &Model) -> Self {
-        println!("Creating tableau from model");
-
         let mut matrix = vec![vec![Fraction::from(0); 0]; 0];
         
         let mut objective_coef: Vec<Number> = model.objective_coeffs.iter().map(|&c| Number::from(c)).collect();
