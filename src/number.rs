@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Number {
     pub m: Fraction,
     pub val: Fraction,
@@ -22,8 +22,12 @@ impl Number {
         Number::new(Fraction::zero(), val)
     }
 
-    pub fn from_m(m: Fraction) -> Self {
-        Number::new(m, Fraction::zero())
+    pub fn from_m(m: impl Into<Fraction>) -> Self {
+        Number::new(m.into(), Fraction::zero())
+    }
+
+    pub fn has_m(&self) -> bool {
+        self.m != Fraction::zero()
     }
 
     pub fn is_integer(&self) -> bool {
@@ -107,7 +111,7 @@ impl From<Fraction> for Number {
     }
 }
 
-impl fmt::Display for Number {
+impl fmt::Debug for Number {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let m_zero = self.m == Fraction::zero();
         let val_zero = self.val == Fraction::zero();

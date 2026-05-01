@@ -13,7 +13,7 @@ fn gcd(mut a: i64, mut b: i64) -> i64 {
     a
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Fraction {
     pub num: i64,
     pub den: i64,
@@ -109,6 +109,16 @@ impl Neg for Fraction {
 }
 
 impl fmt::Display for Fraction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.den == 1 {
+            write!(f, "{}", self.num)
+        } else {
+            write!(f, "{}/{}", self.num, self.den)
+        }
+    }
+}
+
+impl fmt::Debug for Fraction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.den == 1 {
             write!(f, "{}", self.num)
