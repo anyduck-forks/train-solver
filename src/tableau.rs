@@ -163,7 +163,7 @@ impl Tableau {
         }
 
         let leaving_index = self.basic_vars[row];
-        self.basic_vars[row] = col;
+        self.basic_vars[row] = col - 1;
         if self.objective_coef[leaving_index].has_m() {
             self.remove_m_variables(leaving_index);
         }
