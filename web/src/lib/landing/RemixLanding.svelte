@@ -14,9 +14,11 @@
   import { createModelTexture } from "./engine/model-texture.ts";
   import { loadModelPoints, type ModelData } from "./engine/model-loader.ts";
   import { presets } from "./engine/presets.ts";
-  import { DEFAULT_SETTINGS, type Preset, type ShaderId } from "./engine/types.ts";
+  import { DEFAULT_SETTINGS, type ControlDef, type Preset, type ShaderId } from "./engine/types.ts";
   import { clamp, clamp01, lerp } from "./utils/math.ts";
   import { initReducedMotion, reducedMotion } from "./utils/reduced-motion.ts";
+
+  let { presetIndex = null, showContent = false } = $props();
 
   const PARTICLE_INTRO_DELAY_S = 1;
   const DEFAULT_CAM_POS: [number, number, number] = [0, 30, 80];
@@ -150,8 +152,16 @@
 
   let labels = $state<ProjectedLabel[]>([]);
   let labelOpacity = $state(0);
+  let controlList = $state<ControlDef[]>([]);
 
   const morphValueRef = { current: 0 };
+  let targetPreset = $state<number | null>(null);
+  let activePreset = 0;
+  let transitionBlend = 0;
+  let transitionFrom = 0;
+  let transitionTo = 0;
+  let transitionActive = false;
+  let hasPresetSelection = false;
   const modelData: (ModelData | undefined)[] = Array.from({
     length: presets.length,
   });
@@ -326,8 +336,18 @@
       const dtSeconds =
         lastFrameNow === 0 ? 1 / 60 : (now - lastFrameNow) / 1000;
       lastFrameNow = now;
+      if (targetPreset !== null && transitionActive) {
+        const speed = 2.8;
+        transitionBlend = Math.min(transitionBlend + dtSeconds * speed, 1);
+        if (transitionBlend >= 1) {
+          transitionActive = false;
+          activePreset = transitionTo;
+        }
+      }
       const presetData = getPresetRuntimeData(presets);
-      const morphValue = morphValueRef.current;
+      const morphValue = transitionActive
+        ? lerp(transitionFrom, transitionTo, transitionBlend)
+        : activePreset;
       const reduceMotion = reducedMotion.current;
 
       if (reduceMotion) {
@@ -385,7 +405,13 @@
       particles.setTime(visualTime);
 
       const maxValue = presets.length - 1;
-      getMorphBlend(morphValue, maxValue, morphBlend);
+      if (targetPreset === null) {
+        getMorphBlend(morphValue, maxValue, morphBlend);
+      } else {
+        morphBlend.fromIndex = transitionActive ? transitionFrom : activePreset;
+        morphBlend.toIndex = transitionActive ? transitionTo : activePreset;
+        morphBlend.blend = transitionActive ? transitionBlend : 0;
+      }
       const { fromIndex, toIndex, blend } = morphBlend;
 
       let separation: number;
@@ -566,6 +592,7 @@
       if (nearest !== previousNearest) {
         previousNearest = nearest;
         labelControlMgr.loadPreset(presets[nearest]);
+        controlList = Array.from(labelControlMgr.controls.values());
       }
 
       const nearestPreset = presets[nearest];
@@ -618,6 +645,34 @@
     morphValueRef.current = clamp((scrollTop / maxScroll) * maxValue, 0, maxValue);
   }
 
+  $effect(() => {
+    if (presetIndex === null || Number.isNaN(presetIndex)) {
+      targetPreset = null;
+      return;
+    }
+    const maxValue = presets.length - 1;
+    const nextPreset = clamp(presetIndex, 0, maxValue);
+    targetPreset = nextPreset;
+
+    if (!hasPresetSelection) {
+      activePreset = nextPreset;
+      transitionFrom = nextPreset;
+      transitionTo = nextPreset;
+      transitionBlend = 0;
+      transitionActive = false;
+      hasPresetSelection = true;
+      morphValueRef.current = nextPreset;
+      return;
+    }
+
+    if (nextPreset !== activePreset) {
+      transitionFrom = activePreset;
+      transitionTo = nextPreset;
+      transitionBlend = 0;
+      transitionActive = true;
+    }
+  });
+
   onMount(() => {
     const controller = new AbortController();
     const { signal } = controller;
@@ -645,8 +700,10 @@
       { signal },
     );
 
-    window.addEventListener("scroll", updateScroll, { signal, passive: true });
-    updateScroll();
+    if (presetIndex === null) {
+      window.addEventListener("scroll", updateScroll, { signal, passive: true });
+      updateScroll();
+    }
 
     const load = async () => {
       await Promise.all(
@@ -698,28 +755,60 @@
     </div>
   </div>
 
-  <main class="content">
-    <section class="panel hero">
-      <div class="hero-card">
-        <p class="kicker">Train Solver</p>
-        <h1>Two lines. One rhythm.</h1>
-        <p class="lede">
-          Scroll to morph through presets. Cursor drives the parallax and track
-          steering. Labels follow the model the same way as the Remix landing.
-        </p>
-      </div>
-    </section>
-    <section class="panel detail">
-      <div class="detail-card">
-        <p class="kicker">Particle pass</p>
-        <h2>Signal in the noise.</h2>
-        <p>
-          Multi-preset morphing is back. This is the original Remix landing
-          pipeline, running inside Svelte.
-        </p>
-      </div>
-    </section>
-  </main>
+  {#if false}
+    <aside class="control-panel">
+      <h3>Controls</h3>
+      {#if controlList.length === 0}
+        <p class="control-empty">No active preset controls.</p>
+      {:else}
+        <div class="control-list">
+          {#each controlList as control (control.id)}
+            <label class="control-item">
+              <span>{control.label}</span>
+              <input
+                type="range"
+                min={control.min}
+                max={control.max}
+                step="0.01"
+                value={control.value}
+                oninput={(event) => {
+                  const next = Number((event.currentTarget as HTMLInputElement).value);
+                  labelControlMgr.setControlValue(control.id, next);
+                  controlList = Array.from(labelControlMgr.controls.values());
+                }}
+              />
+              <strong>{control.value.toFixed(2)}</strong>
+            </label>
+          {/each}
+        </div>
+      {/if}
+    </aside>
+  {/if}
+
+  {#if showContent}
+    <main class="content">
+      <section class="panel hero">
+        <div class="hero-card">
+          <p class="kicker">Train Solver</p>
+          <h1>Two lines. One rhythm.</h1>
+          <p class="lede">
+            Scroll to morph through presets. Cursor drives the parallax and track
+            steering. Labels follow the model the same way as the Remix landing.
+          </p>
+        </div>
+      </section>
+      <section class="panel detail">
+        <div class="detail-card">
+          <p class="kicker">Particle pass</p>
+          <h2>Signal in the noise.</h2>
+          <p>
+            Multi-preset morphing is back. This is the original Remix landing
+            pipeline, running inside Svelte.
+          </p>
+        </div>
+      </section>
+    </main>
+  {/if}
 </div>
 
 <style>
@@ -733,7 +822,7 @@
 
   .landing {
     position: relative;
-    min-height: 240vh;
+    /* min-height: 240vh; */
   }
 
   .canvas-shell {
@@ -772,6 +861,58 @@
     height: 6px;
     border-radius: 999px;
     background: currentColor;
+  }
+
+  .control-panel {
+    position: fixed;
+    left: 24px;
+    bottom: 24px;
+    z-index: 4;
+    width: min(360px, 90vw);
+    max-height: 60vh;
+    overflow: auto;
+    padding: 16px 18px;
+    background: rgba(8, 12, 20, 0.8);
+    border-radius: 16px;
+    box-shadow: 0 18px 40px rgba(3, 6, 12, 0.6);
+    backdrop-filter: blur(12px);
+    pointer-events: auto;
+  }
+
+  .control-panel h3 {
+    margin: 0 0 12px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
+
+  .control-empty {
+    margin: 0;
+    color: rgba(220, 232, 245, 0.7);
+  }
+
+  .control-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .control-item {
+    display: grid;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .control-item span {
+    color: rgba(220, 232, 245, 0.8);
+  }
+
+  .control-item input[type="range"] {
+    width: 100%;
+  }
+
+  .control-item strong {
+    font-size: 11px;
+    color: rgba(220, 232, 245, 0.6);
   }
 
   .content {
