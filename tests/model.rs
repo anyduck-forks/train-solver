@@ -2,7 +2,20 @@ use std::assert_matches;
 use train_solver::{
     fraction::Fraction,
     model::{ConstraintType, Model, ObjectiveType},
+    simplex::{SnapshotKind, SolveLog},
 };
+
+fn assert_pivot_log_shape(log: &SolveLog) {
+    assert_eq!(log.steps.len() % 2, 0);
+    for pair in log.steps.chunks(2) {
+        assert_eq!(pair.len(), 2);
+        assert_eq!(pair[0].kind, SnapshotKind::BeforePivot);
+        assert_eq!(pair[1].kind, SnapshotKind::AfterPivot);
+        assert_eq!(pair[0].phase, pair[1].phase);
+        assert_eq!(pair[0].pivot_row, pair[1].pivot_row);
+        assert_eq!(pair[0].pivot_col, pair[1].pivot_col);
+    }
+}
 
 #[test]
 fn lab2() {
@@ -22,9 +35,10 @@ fn lab2() {
     let target = Fraction::from(6);
 
     match result {
-        train_solver::simplex::SimplexStatus::Optimal(value, vars) => {
-            assert_eq!(vars, vec![(0, x1), (1, x2)]);
+        train_solver::simplex::SimplexStatus::Optimal { value, vars, log } => {
+            assert_eq!(vars, vec![x1, x2]);
             assert_eq!(value, target.into());
+            assert_pivot_log_shape(&log);
         }
         _ => panic!("Expected optimal solution, got {:?}", result),
     }
@@ -40,7 +54,7 @@ fn lab3() {
     model.add_constraint(vec![3, 1], ConstraintType::GreaterEq, 15);
 
     let result = train_solver::solve(&model);
-    assert_matches!(result, train_solver::simplex::SimplexStatus::Unbounded);
+    assert_matches!(result, train_solver::simplex::SimplexStatus::Unbounded { .. });
 }
 
 #[test]
@@ -53,7 +67,7 @@ fn lab4() {
     model.add_constraint(vec![2, 1], ConstraintType::LessEq, 2);
 
     let result = train_solver::solve(&model);
-    assert_matches!(result, train_solver::simplex::SimplexStatus::Infeasible);
+    assert_matches!(result, train_solver::simplex::SimplexStatus::Infeasible { .. });
 }
 
 #[test]
@@ -72,9 +86,10 @@ fn lab6() {
     let target = Fraction::from(11);
 
     match result {
-        train_solver::simplex::SimplexStatus::Optimal(value, vars) => {
-            assert_eq!(vars, vec![(0, x1), (1, x2)]);
+        train_solver::simplex::SimplexStatus::Optimal { value, vars, log } => {
+            assert_eq!(vars, vec![x1, x2]);
             assert_eq!(value, target.into());
+            assert_pivot_log_shape(&log);
         }
         _ => panic!("Expected optimal solution, got {:?}", result),
     }
@@ -102,9 +117,10 @@ fn lab8() {
     let target = Fraction::from(0);
 
     match result {
-        train_solver::simplex::SimplexStatus::Optimal(value, vars) => {
-            assert_eq!(vars, vec![(0, x1), (1, x2), (2, x3), (3, x4)]);
+        train_solver::simplex::SimplexStatus::Optimal { value, vars, log } => {
+            assert_eq!(vars, vec![x1, x2, x3, x4]);
             assert_eq!(value, target.into());
+            assert_pivot_log_shape(&log);
         }
         _ => panic!("Expected optimal solution, got {:?}", result),
     }
@@ -135,9 +151,10 @@ fn lab8_maks() {
     let target = Fraction::from(0);
 
     match result {
-        train_solver::simplex::SimplexStatus::Optimal(value, vars) => {
-            assert_eq!(vars, vec![(0, x1), (1, x2), (2, x3), (3, x4), (4, x5)]);
+        train_solver::simplex::SimplexStatus::Optimal { value, vars, log } => {
+            assert_eq!(vars, vec![x1, x2, x3, x4, x5]);
             assert_eq!(value, target.into());
+            assert_pivot_log_shape(&log);
         }
         _ => panic!("Expected optimal solution, got {:?}", result),
     }
@@ -169,9 +186,10 @@ fn lab8_maks2() {
     let target = Fraction::from(0);
 
     match result {
-        train_solver::simplex::SimplexStatus::Optimal(value, vars) => {
-            assert_eq!(vars, vec![(0, x1), (1, x2), (2, x3), (3, x4), (4, x5)]);
+        train_solver::simplex::SimplexStatus::Optimal { value, vars, log } => {
+            assert_eq!(vars, vec![x1, x2, x3, x4, x5]);
             assert_eq!(value, target.into());
+            assert_pivot_log_shape(&log);
         }
         _ => panic!("Expected optimal solution, got {:?}", result),
     }
@@ -202,9 +220,10 @@ fn labX() {
     let target = Fraction::from(0);
 
     match result {
-        train_solver::simplex::SimplexStatus::Optimal(value, vars) => {
-            assert_eq!(vars, vec![(0, x1), (1, x2), (2, x3), (3, x4)]);
+        train_solver::simplex::SimplexStatus::Optimal { value, vars, log } => {
+            assert_eq!(vars, vec![x1, x2, x3, x4]);
             assert_eq!(value, target.into());
+            assert_pivot_log_shape(&log);
         }
         _ => panic!("Expected optimal solution, got {:?}", result),
     }

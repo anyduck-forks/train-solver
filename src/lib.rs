@@ -5,25 +5,64 @@ pub mod model;
 pub mod number;
 pub mod simplex;
 pub mod tableau;
+pub mod wasm;
+
+fn snapshot(tableau: &tableau::Tableau) -> simplex::SimplexSnapshot {
+    simplex::SimplexSnapshot {
+        tableau: tableau.clone(),
+        estimates: tableau.esstimates().collect(),
+        objective: tableau.objective(),
+    }
+}
+
+fn push_pivot_snapshot(
+    log: &mut simplex::SolveLog,
+    tableau: &tableau::Tableau,
+    phase: simplex::SolvePhase,
+    kind: simplex::SnapshotKind,
+    row: usize,
+    col: usize,
+) {
+    log.steps.push(simplex::SolveStep {
+        phase,
+        kind,
+        pivot_row: row,
+        pivot_col: col,
+        snapshot: snapshot(tableau),
+    });
+}
 
 pub fn solve(model: &model::Model) -> simplex::SimplexStatus {
     let mut tableau = tableau::Tableau::from_model(model);
-
-    println!("Initial tableau: {:?}", tableau);
-    println!("Initial estimates: {:?}", tableau.esstimates().collect::<Vec<_>>());
+    let mut log = simplex::SolveLog::default();
 
     while !tableau.is_optimal() {
         if let Some((row, col)) = tableau.choose_standart_pivot() {
-            println!("Pivoting on row {}, col {}", row, col);
+            push_pivot_snapshot(
+                &mut log,
+                &tableau,
+                simplex::SolvePhase::Primal,
+                simplex::SnapshotKind::BeforePivot,
+                row,
+                col,
+            );
             tableau.pivot(row, col);
+            push_pivot_snapshot(
+                &mut log,
+                &tableau,
+                simplex::SolvePhase::Primal,
+                simplex::SnapshotKind::AfterPivot,
+                row,
+                col,
+            );
         } else {
-            return simplex::SimplexStatus::Unbounded;
+            return simplex::SimplexStatus::Unbounded { log };
         }
     }
 
     for &i in tableau.basic_vars.iter() {
         if tableau.objective_coef[i].has_m() {
-            return simplex::SimplexStatus::Infeasible;
+            return simplex::SimplexStatus::Infeasible { log };
         }
     }
 
@@ -32,9 +71,25 @@ pub fn solve(model: &model::Model) -> simplex::SimplexStatus {
         while !tableau.is_feasible() {
             if let Some(row) = tableau.choose_dual_pivot_row() {
                 if let Some(col) = tableau.choose_dual_pivot_col(row) {
+                    push_pivot_snapshot(
+                        &mut log,
+                        &tableau,
+                        simplex::SolvePhase::Dual,
+                        simplex::SnapshotKind::BeforePivot,
+                        row,
+                        col,
+                    );
                     tableau.pivot(row, col);
+                    push_pivot_snapshot(
+                        &mut log,
+                        &tableau,
+                        simplex::SolvePhase::Dual,
+                        simplex::SnapshotKind::AfterPivot,
+                        row,
+                        col,
+                    );
                 } else {
-                    return simplex::SimplexStatus::Infeasible;
+                    return simplex::SimplexStatus::Infeasible { log };
                 }
             } else {
                 break;
@@ -67,13 +122,16 @@ pub fn solve(model: &model::Model) -> simplex::SimplexStatus {
     let vars = (0..model.variables.len())
         .map(|i| {
             if let Some(row) = tableau.basic_vars.iter().position(|&j| j == i) {
-                return tableau.matrix[row][0];
+                tableau.matrix[row][0]
             } else {
-                return Fraction::from(0);
+                Fraction::from(0)
             }
         })
-        .enumerate()
         .collect::<Vec<_>>();
 
-    simplex::SimplexStatus::Optimal(tableau.objective(), vars)
+    simplex::SimplexStatus::Optimal {
+        value: tableau.objective(),
+        vars,
+        log,
+    }
 }
