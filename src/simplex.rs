@@ -1,5 +1,4 @@
 use crate::{fraction::Fraction, number::Number};
-use crate::tableau::Tableau;
 
 #[derive(Debug, Clone)]
 pub enum SimplexStatus {
@@ -7,5 +6,3 @@ pub enum SimplexStatus {
     Infeasible,
     Unbounded,
 }
-
-

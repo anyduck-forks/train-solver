@@ -50,9 +50,18 @@ impl Model {
         index
     }
 
-    pub fn add_constraint<T: Into<Fraction>, I: IntoIterator<Item = T>>(&mut self, coeffs: I, relation: ConstraintType, rhs: T) {
+    pub fn add_constraint<T: Into<Fraction>, I: IntoIterator<Item = T>>(
+        &mut self,
+        coeffs: I,
+        relation: ConstraintType,
+        rhs: T,
+    ) {
         // assert_eq!(coeffs.collect::<Vec<_>>().len(), self.variables.len(), "Each constraint must have a coefficient for every variable");
-        let mut constraint = Constraint { coeffs: coeffs.into_iter().map(Into::into).collect(), relation, rhs: rhs.into() };
+        let mut constraint = Constraint {
+            coeffs: coeffs.into_iter().map(Into::into).collect(),
+            relation,
+            rhs: rhs.into(),
+        };
 
         if constraint.rhs < Fraction::from(0) {
             constraint.coeffs.iter_mut().for_each(|c| *c = -*c);

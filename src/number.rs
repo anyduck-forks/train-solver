@@ -29,10 +29,6 @@ impl Number {
     pub fn has_m(&self) -> bool {
         self.m != Fraction::zero()
     }
-
-    pub fn is_integer(&self) -> bool {
-        self.m.num == 0 && self.val.den == 1
-    }
 }
 
 impl PartialOrd for Number {

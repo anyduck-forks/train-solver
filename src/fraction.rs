@@ -42,6 +42,22 @@ impl Fraction {
         Fraction::new(1, 1)
     }
 
+    pub fn is_integer(&self) -> bool {
+        self.den == 1
+    }
+
+    pub fn floor(self) -> Self {
+        let mut f = self.num / self.den;
+        if self.num < 0 && self.num % self.den != 0 {
+            f -= 1;
+        }
+        Fraction::new(f, 1)
+    }
+
+    pub fn fract(self) -> Self {
+        self - self.floor()
+    }
+
     pub fn abs(self) -> Self {
         Fraction::new(self.num.abs(), self.den.abs())
     }
@@ -104,7 +120,10 @@ impl Div for Fraction {
 impl Neg for Fraction {
     type Output = Fraction;
     fn neg(self) -> Fraction {
-        Fraction { num: -self.num, den: self.den }
+        Fraction {
+            num: -self.num,
+            den: self.den,
+        }
     }
 }
 
@@ -137,9 +156,19 @@ mod tests {
         let a = Fraction::new(2, 4);
         assert_eq!(a.num, 1);
         assert_eq!(a.den, 2);
-        
+
         let b = Fraction::new(1, 3);
         let c = a + b;
         assert_eq!(c, Fraction::new(5, 6));
+    }
+
+    #[test]
+    fn test_fract() {
+        assert_eq!(Fraction::new(20, 3).fract(), Fraction::new(2, 3));
+        assert_eq!(Fraction::new(2, 3).fract(), Fraction::new(2, 3));
+        assert_eq!(Fraction::new(-1, 3).fract(), Fraction::new(2, 3));
+
+        assert_eq!(Fraction::new(-5, 2).fract(), Fraction::new(1, 2));
+        assert_eq!(Fraction::new(-5, 2).fract(), Fraction::new(1, 2));
     }
 }
