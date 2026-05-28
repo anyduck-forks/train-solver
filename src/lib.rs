@@ -29,32 +29,53 @@ fn push_pivot_snapshot(
         pivot_row: row,
         pivot_col: col,
         snapshot: snapshot(tableau),
+        cut: None,
+    });
+}
+
+fn push_cut_snapshot(log: &mut simplex::SolveLog, tableau: &tableau::Tableau, rhs: Fraction, coeffs: Vec<Fraction>) {
+    log.steps.push(simplex::SolveStep {
+        phase: simplex::SolvePhase::Primal,
+        kind: simplex::SnapshotKind::Cut,
+        pivot_row: 0,
+        pivot_col: 0,
+        snapshot: snapshot(tableau),
+        cut: Some(simplex::Cut { rhs, coeffs }),
     });
 }
 
 pub fn solve(model: &model::Model) -> simplex::SimplexStatus {
+    const SNAPSHOT_ITERATION_LIMIT: usize = 10;
+
     let mut tableau = tableau::Tableau::from_model(model);
     let mut log = simplex::SolveLog::default();
+    let mut pivot_iteration = 0usize;
 
     while !tableau.is_optimal() {
         if let Some((row, col)) = tableau.choose_standart_pivot() {
-            push_pivot_snapshot(
-                &mut log,
-                &tableau,
-                simplex::SolvePhase::Primal,
-                simplex::SnapshotKind::BeforePivot,
-                row,
-                col,
-            );
+            let should_log_snapshot = pivot_iteration < SNAPSHOT_ITERATION_LIMIT;
+            if should_log_snapshot {
+                push_pivot_snapshot(
+                    &mut log,
+                    &tableau,
+                    simplex::SolvePhase::Primal,
+                    simplex::SnapshotKind::BeforePivot,
+                    row,
+                    col,
+                );
+            }
             tableau.pivot(row, col);
-            push_pivot_snapshot(
-                &mut log,
-                &tableau,
-                simplex::SolvePhase::Primal,
-                simplex::SnapshotKind::AfterPivot,
-                row,
-                col,
-            );
+            if should_log_snapshot {
+                push_pivot_snapshot(
+                    &mut log,
+                    &tableau,
+                    simplex::SolvePhase::Primal,
+                    simplex::SnapshotKind::AfterPivot,
+                    row,
+                    col,
+                );
+            }
+            pivot_iteration += 1;
         } else {
             return simplex::SimplexStatus::Unbounded { log };
         }
@@ -71,23 +92,29 @@ pub fn solve(model: &model::Model) -> simplex::SimplexStatus {
         while !tableau.is_feasible() {
             if let Some(row) = tableau.choose_dual_pivot_row() {
                 if let Some(col) = tableau.choose_dual_pivot_col(row) {
-                    push_pivot_snapshot(
-                        &mut log,
-                        &tableau,
-                        simplex::SolvePhase::Dual,
-                        simplex::SnapshotKind::BeforePivot,
-                        row,
-                        col,
-                    );
+                    let should_log_snapshot = pivot_iteration < SNAPSHOT_ITERATION_LIMIT;
+                    if should_log_snapshot {
+                        push_pivot_snapshot(
+                            &mut log,
+                            &tableau,
+                            simplex::SolvePhase::Dual,
+                            simplex::SnapshotKind::BeforePivot,
+                            row,
+                            col,
+                        );
+                    }
                     tableau.pivot(row, col);
-                    push_pivot_snapshot(
-                        &mut log,
-                        &tableau,
-                        simplex::SolvePhase::Dual,
-                        simplex::SnapshotKind::AfterPivot,
-                        row,
-                        col,
-                    );
+                    if should_log_snapshot {
+                        push_pivot_snapshot(
+                            &mut log,
+                            &tableau,
+                            simplex::SolvePhase::Dual,
+                            simplex::SnapshotKind::AfterPivot,
+                            row,
+                            col,
+                        );
+                    }
+                    pivot_iteration += 1;
                 } else {
                     return simplex::SimplexStatus::Infeasible { log };
                 }
@@ -107,7 +134,11 @@ pub fn solve(model: &model::Model) -> simplex::SimplexStatus {
             if let Some(row_idx) = tableau.basic_vars.iter().position(|&j| j == var_idx) {
                 let val = tableau.matrix[row_idx][0];
                 if !val.is_integer() {
-                    tableau.add_gomory_cut(row_idx);
+                    let (rhs, coeffs) = tableau.add_gomory_cut(row_idx);
+                    let should_log_snapshot = pivot_iteration < SNAPSHOT_ITERATION_LIMIT;
+                    if should_log_snapshot {
+                        push_cut_snapshot(&mut log, &tableau, rhs, coeffs.clone());
+                    }
                     cut_added = true;
                     break;
                 }

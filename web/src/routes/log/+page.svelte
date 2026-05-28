@@ -1,4 +1,5 @@
 <script lang="ts">
+    import Hero from '$lib/components/Hero.svelte';
   import {
     solveLabels,
     solveResult,
@@ -19,11 +20,11 @@
 
   let openStep = $state<'start' | number | null>('start');
 
-  const methodLabel = (phase: 'primal' | 'dual') =>
-    phase === 'primal' ? 'Прямий симплекс' : 'Двоїстий симплекс';
+  const methodLabel = (phase: 'primal' | 'dual', kind: 'before_pivot' | 'after_pivot' | 'cut') =>
+    phase === 'primal' ? (kind === 'cut' ? 'Додано зріз' : 'Прямий симплекс') : 'Двоїстий симплекс';
 
-  const kindLabel = (kind: 'before_pivot' | 'after_pivot') =>
-    kind === 'before_pivot' ? 'Перед pivot' : 'Після pivot';
+  const kindLabel = (kind: 'before_pivot' | 'after_pivot' | 'cut') =>
+    kind === 'before_pivot' ? 'Перед pivot' : kind === 'after_pivot' ? 'Після pivot' : 'Додано зріз';
 
   const getCut = (step: (typeof $solveResult) extends infer R
     ? R extends { log: { steps: (infer S)[] } }
@@ -34,19 +35,19 @@
   const buildCutEquation = (cut: CutDto, labels: string[]) => {
     const terms = cut.coeffs.map((coeff, index) => {
       const value = formatFraction(coeff);
-      const label = labels[index] ?? `x${index + 1}`;
+      const label = `x<sub>${index + 1}</sub>`;
       return `${value}·${label}`;
     });
-    return `${terms.join(' + ')} \le ${formatFraction(cut.rhs)}`;
+    return `${terms.join(' + ')} <= ${formatFraction(cut.rhs)}`;
   };
 
   const startValueLabel = (source: 'main' | 'advanced') =>
-    source === 'main' ? 'Парк вагонів' : 'Коефіцієнт цілі';
+    source === 'main' ? 'К-сть пасажирів' : 'Коефіцієнт цілі';
 
   const startValue = (source: 'main' | 'advanced', index: number) => {
     if (source === 'main') {
-      const value = $mainEditor.rows[index]?.values[0] ?? 0;
-      return formatFraction({ num: Number(value) || 0, den: 1 });
+      const value = $mainEditor.rows.reduce((sum, row) => sum + row.values[2+index] * row.values[1], 0);
+      return formatFraction({ num: value || 0, den: 1 });
     }
     const value = $advancedEditor.objective[index] ?? '0';
     return formatFraction({ num: Number(value) || 0, den: 1 });
@@ -57,15 +58,84 @@
     return labels[basisIndex] ?? `x${basisIndex + 1}`;
   };
 
+  // Tableau labels should always be xN so the historical snapshots stay in variable-index notation.
+  const tableauBasisLabel = (basisIndex: number | undefined) => {
+    if (basisIndex === undefined || basisIndex === null) return '—';
+    return `x${basisIndex + 1}`;
+  };
+
   const pivotSteps = $derived(
-    ($solveResult?.log.steps ?? []).filter((step) => step.kind === 'after_pivot'),
+    ($solveResult?.log.steps ?? []).filter((step) => step.kind === 'after_pivot' || step.kind === 'cut'),
   );
+
+  const SNAPSHOT_ITERATION_LIMIT = 10;
+
+  const fractionsEqual = (
+    left: { num: number; den: number },
+    right: { num: number; den: number },
+  ) => left.num * right.den === right.num * left.den;
+
+  const varsFromSnapshot = (
+    step: (typeof $solveResult) extends infer R
+      ? R extends { log: { steps: (infer S)[] } }
+        ? S
+        : never
+      : never,
+    variableCount: number,
+  ) => {
+    const vars = Array.from({ length: variableCount }, () => ({ num: 0, den: 1 }));
+    const matrix = step.snapshot.tableau.matrix;
+    const basicVars = step.snapshot.tableau.basic_vars;
+
+    for (let rowIndex = 0; rowIndex < basicVars.length; rowIndex += 1) {
+      const basisIndex = basicVars[rowIndex];
+      if (basisIndex === undefined || basisIndex < 0 || basisIndex >= variableCount) {
+        continue;
+      }
+      vars[basisIndex] = matrix[rowIndex]?.[0] ?? { num: 0, den: 1 };
+    }
+
+    return vars;
+  };
+
+  const isSnapshotLogTruncated = $derived.by(() => {
+    if (!$solveResult || pivotSteps.length < SNAPSHOT_ITERATION_LIMIT) return false;
+
+    if ($solveResult.status !== 'optimal') {
+      // For non-optimal statuses there is no final variable vector to compare with.
+      return pivotSteps.length >= SNAPSHOT_ITERATION_LIMIT;
+    }
+
+    const limitStep = pivotSteps[SNAPSHOT_ITERATION_LIMIT - 1];
+    if (!limitStep) return false;
+
+    const limitVars = varsFromSnapshot(limitStep, $solveResult.vars.length);
+    return $solveResult.vars.some((value, index) => !fractionsEqual(value, limitVars[index]));
+  });
 
   const startStep = $derived(
     $solveResult?.log.steps.find((step) => step.kind === 'before_pivot') ??
       $solveResult?.log.steps[0] ??
       null,
   );
+
+  const statusMessage = (status: string | null | undefined) => {
+    if (!status) return 'Ще немає результату.';
+    const s = String(status).toLowerCase();
+    switch (s) {
+      case 'optimal':
+        return 'Знайдено оптимальне рішення.';
+      case 'unbounded':
+        return 'Розв\'язок необмежений (ОДР).';
+      case 'infeasible':
+      case 'empty':
+        return 'Немає допустимих розв\'язків (порожня множина).';
+      case 'error':
+        return 'Сталася помилка під час розв\'язування.';
+      default:
+        return `Статус: ${status}`;
+    }
+  };
 </script>
 
 <svelte:head>
@@ -73,27 +143,19 @@
 </svelte:head>
 
 <section class="page">
-  <div class="hero">
-    <p class="kicker">Журнал розв’язання</p>
-    <h1>Результат збережено</h1>
-    <p class="lead">
-      Джерело: {sourceLabel[$solveSource]}. Нижче показано відповідь у порядку змінних та короткий слід
-      pivot-ів.
-    </p>
-  </div>
+  <Hero kicker="ММДO · Розв'язок">Результат</Hero>
 
   {#if $solveResult}
     <div class="panel status-panel">
       <div class="status-head">
         <div>
           <p class="status-label">Статус</p>
-          <h2>{$solveResult.status}</h2>
+          <h2>{statusMessage($solveResult.status)}</h2>
         </div>
         <a class="cta" href={backHref}>Повернутись назад</a>
       </div>
 
       {#if $solveResult.status === 'optimal'}
-        <div class="solution-card">
           <div class="objective">
             <span>Значення цілі</span>
             <strong>{formatFraction($solveResult.value)}</strong>
@@ -107,27 +169,18 @@
               </div>
             {/each}
           </div>
-        </div>
-      {:else}
-        <div class="empty-state">
-          <p>Немає оптимального розв’язку для цього запуску.</p>
-        </div>
       {/if}
 
       <div class="trace-head">
-        <h3>Слід pivot-ів</h3>
-        <span>{ pivotSteps.length } кроків</span>
+        <h3>Історія розвязку</h3>
+        <span>{isSnapshotLogTruncated ? `${SNAPSHOT_ITERATION_LIMIT}+` : pivotSteps.length} кроків</span>
       </div>
 
-      <div class="variable-card">
+      <!-- <div class="variable-card"> -->
         <div class="variable-head">
-          <div>
             <p class="status-label">Змінні</p>
-            <h3>Пояснення та стартові значення</h3>
-          </div>
-          <span class="variable-note">Джерело: {sourceLabel[$solveSource]}</span>
         </div>
-        <p class="variable-help">Пояснює, що означає кожна змінна, та її стартове значення.</p>
+
         <div class="variable-list">
           {#each $solveLabels as label, index}
             <div class="variable-row">
@@ -142,14 +195,14 @@
             </div>
           {/each}
         </div>
-      </div>
+      <!-- </div> -->
 
       <div class="trace-list">
         {#if startStep}
           <details
             class="trace-row"
             name="trace"
-            open={openStep === 'start'}
+            open={false}
             ontoggle={(event) => {
               const isOpen = (event.currentTarget as HTMLDetailsElement).open;
               openStep = isOpen ? 'start' : openStep === 'start' ? null : openStep;
@@ -158,7 +211,6 @@
             <summary class="trace-summary">
               <div>
                 <p class="trace-kind">Початкова симплекс-таблиця</p>
-                <p class="trace-meta">стартове наближення</p>
               </div>
               <div class="trace-count">#0</div>
             </summary>
@@ -176,7 +228,7 @@
                   <tbody>
                     {#each startStep.snapshot.tableau.matrix as row, rowIndex}
                       <tr>
-                        <th>{basisLabel(startStep.snapshot.tableau.basic_vars[rowIndex], $solveLabels)}</th>
+                        <th>{tableauBasisLabel(startStep.snapshot.tableau.basic_vars[rowIndex])}</th>
                         {#each row as cell}
                           <td>{formatFraction(cell)}</td>
                         {/each}
@@ -201,19 +253,14 @@
           >
             <summary class="trace-summary">
               <div>
-                <p class="trace-kind">{methodLabel(step.phase)} · {kindLabel(step.kind)}</p>
-                <p class="trace-meta">row {step.pivot_row}, col {step.pivot_col}</p>
+                <p class="trace-kind">{methodLabel(step.phase, step.kind)}</p>
               </div>
               <div class="trace-count">#{index + 1}</div>
             </summary>
             <div class="trace-body">
-              <p class="trace-method">
-                Метод: {methodLabel(step.phase)}. Стан: {kindLabel(step.kind)}.
-              </p>
               {#if cut}
-                <p class="trace-method">Додано зріз (cut), наведено рівняння.</p>
                 <p class="cut-equation">
-                  ${buildCutEquation(cut, $solveLabels)}$
+                  {@html buildCutEquation(cut, $solveLabels)}
                 </p>
               {/if}
               <div class="trace-table-wrap">
@@ -228,14 +275,14 @@
                   </thead>
                   <tbody>
                     {#each step.snapshot.tableau.matrix as row, rowIndex}
-                      <tr class={rowIndex === step.pivot_row ? 'pivot-row' : ''}>
-                        <th>{basisLabel(step.snapshot.tableau.basic_vars[rowIndex], $solveLabels)}</th>
+                      <tr class={step.kind !== 'cut' && rowIndex === step.pivot_row ? 'pivot-row' : ''}>
+                        <th>{tableauBasisLabel(step.snapshot.tableau.basic_vars[rowIndex])}</th>
                         {#each row as cell, colIndex}
                           <td
                             class={
-                              rowIndex === step.pivot_row && colIndex === step.pivot_col
+                              step.kind !== 'cut' && rowIndex === step.pivot_row && colIndex === step.pivot_col
                                 ? 'pivot-cell'
-                                : colIndex === step.pivot_col
+                                : step.kind !== 'cut' && colIndex === step.pivot_col
                                   ? 'pivot-col'
                                   : ''
                             }
@@ -251,6 +298,15 @@
             </div>
           </details>
         {/each}
+
+        {#if isSnapshotLogTruncated}
+          <div class="trace-row trace-truncated">
+            <div class="trace-truncated-dots">...</div>
+            <p class="trace-meta">
+              Показано перші {SNAPSHOT_ITERATION_LIMIT} ітерацій. Розв’язувач виконав додаткові кроки.
+            </p>
+          </div>
+        {/if}
       </div>
     </div>
   {:else}
@@ -271,42 +327,17 @@
 
   .page {
     min-height: 100vh;
-    padding: 8vh 7vw 12vh;
+    padding: 6vh 6vw 8vh;
     display: grid;
-    gap: 28px;
+    gap: 18px;
     position: relative;
+    overflow: hidden;
+    align-content: start;
   }
 
-  .hero,
   .panel {
     position: relative;
     z-index: 1;
-  }
-
-  .hero {
-    display: grid;
-    gap: 12px;
-    max-width: 800px;
-  }
-
-  .kicker {
-    margin: 0;
-    font-size: 12px;
-    letter-spacing: 0.3em;
-    text-transform: uppercase;
-    color: rgba(175, 213, 246, 0.72);
-  }
-
-  h1 {
-    margin: 0;
-    font-size: clamp(2.4rem, 4vw, 3.8rem);
-  }
-
-  .lead {
-    margin: 0;
-    max-width: 760px;
-    color: rgba(220, 232, 245, 0.82);
-    line-height: 1.6;
   }
 
   .panel {
@@ -325,6 +356,7 @@
     align-items: center;
     gap: 16px;
     flex-wrap: wrap;
+    margin-bottom: 1rem;
   }
 
   .status-label,
@@ -350,25 +382,6 @@
     font-weight: 700;
   }
 
-  .solution-card,
-  .empty-state {
-    margin-top: 18px;
-    padding: 18px;
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .variable-card {
-    margin-top: 18px;
-    padding: 18px;
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    display: grid;
-    gap: 14px;
-  }
-
   .variable-head {
     display: flex;
     justify-content: space-between;
@@ -377,19 +390,11 @@
     flex-wrap: wrap;
   }
 
-  .variable-note {
-    color: rgba(220, 232, 245, 0.7);
-    font-size: 0.9rem;
-  }
-
-  .variable-help {
-    margin: 0;
-    color: rgba(220, 232, 245, 0.82);
-  }
 
   .variable-list {
     display: grid;
     gap: 10px;
+    margin-bottom: 1rem;
   }
 
   .variable-row {
@@ -457,8 +462,16 @@
     gap: 10px;
   }
 
-  .solution-row,
-  .trace-row {
+  .solution-list {
+    margin-bottom: 1rem;
+  }
+
+  .solution-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 14px;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.04);
   }
@@ -467,6 +480,19 @@
     padding: 0;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .trace-truncated {
+    padding: 12px 14px;
+    display: grid;
+    gap: 4px;
+    place-items: center;
+  }
+
+  .trace-truncated-dots {
+    font-size: 1.5rem;
+    letter-spacing: 0.35em;
+    color: rgba(127, 208, 255, 0.9);
   }
 
   .trace-summary {

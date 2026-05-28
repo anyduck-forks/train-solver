@@ -228,12 +228,19 @@ impl Tableau {
         enter_col
     }
 
-    pub fn add_gomory_cut(&mut self, row_index: usize) {
+    /// Adds a Gomory cut based on `row_index` and returns the cut (rhs and coeffs)
+    /// so callers can log or display it.
+    pub fn add_gomory_cut(&mut self, row_index: usize) -> (Fraction, Vec<Fraction>) {
         let row = self.matrix[row_index]
             .iter()
             .map(|v| -v.fract())
             .collect::<Vec<_>>();
 
-        self.add_row(row[0], &row[1..], ConstraintType::LessEq);
+        let rhs = row[0];
+        let coeffs = row[1..].to_vec();
+
+        self.add_row(rhs, &coeffs, ConstraintType::LessEq);
+
+        (rhs, coeffs)
     }
 }

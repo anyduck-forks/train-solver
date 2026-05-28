@@ -1,9 +1,11 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
+  import SolveActions from '$lib/components/SolveActions.svelte';
+  import Hero from '$lib/components/Hero.svelte';
   import { editorSource, mainEditor, solveAndStore } from '$lib/solverState';
 
-  type Row = { id: number; name: string; values: string[] };
+  type Row = { id: number; name: string; values: number[] };
 
   const initial = get(mainEditor);
 
@@ -11,7 +13,7 @@
   let rows = $state<Row[]>(
     initial.rows.map((row) => ({
       ...row,
-      values: row.values.map((value) => `${value}`),
+      values: [...row.values],
     })),
   );
   let isSolving = $state(false);
@@ -22,7 +24,7 @@
       columns: [...columns],
       rows: rows.map((row) => ({
         ...row,
-        values: row.values.map((value) => Number(value) || 0),
+        values: [...row.values],
       })),
     });
   });
@@ -32,7 +34,7 @@
     const newRow = {
       id: Date.now(),
       name: `Рядок ${nextIndex}`,
-      values: columns.map(() => '0'),
+      values: columns.map(() => 0),
     };
     rows = [...rows.slice(0, index), newRow, ...rows.slice(index)];
   };
@@ -53,7 +55,7 @@
     ];
     rows = rows.map((row) => ({
       ...row,
-      values: [...row.values.slice(0, index), '0', ...row.values.slice(index)],
+      values: [...row.values.slice(0, index), 0, ...row.values.slice(index)],
     }));
   };
 
@@ -95,10 +97,7 @@
 </svelte:head>
 
 <section class="page">
-  <div class="hero">
-    <p class="kicker">ММДО · Ввід даних</p>
-    <h1>Таблиця складу потягів</h1>
-  </div>
+  <Hero kicker="ММДО · Ввід даних">Таблиця складу потягів</Hero>
   <div class="table-card">
     <div class="table-shell">
       <div class="table-wrap">
@@ -185,18 +184,12 @@
       <div class="edge-slot edge-slot-empty" aria-hidden="true"></div>
     </div>
   </div>
-  <div class="solve-row">
-    <progress
-      class={`solve-progress${isSolving ? " is-active" : ""}`}
-      aria-label="Розв’язання"
-    ></progress>
-    <div class="solve-actions">
-      <a class="btn btn-secondary" href="/advanced">Розширене введення</a>
-      <button class="btn btn-primary" type="button" onclick={startSolve}>
-        Розв’язати
-      </button>
-    </div>
-  </div>
+  <SolveActions
+    {isSolving}
+    onSolve={startSolve}
+    secondaryHref="/advanced"
+    secondaryLabel="Розширене введення"
+  />
 </section>
 
 <style>
@@ -213,12 +206,13 @@
   }
 
   .page {
-    /* min-height: 100vh; */
-    padding: 8vh 7vw 12vh;
+    min-height: 100vh;
+    padding: 6vh 6vw 8vh;
     display: grid;
-    gap: 32px;
+    gap: 18px;
     position: relative;
     overflow: hidden;
+    align-content: start;
   }
 
   .page::before {
@@ -240,149 +234,11 @@
     top: -120px;
     left: -160px;
   }
-
-
-  .hero {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    align-items: flex-start;
-  }
-
-  .kicker {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.3em;
-    color: rgba(255, 220, 200, 0.7);
-    margin: 0 0 8px;
-  }
-
-  h1 {
-    margin: 0 0 12px;
-    font-size: clamp(2.4rem, 3.6vw, 3.6rem);
-    letter-spacing: -0.02em;
-  }
-
-  .lead {
-    margin: 0;
-    font-size: 1.05rem;
-    color: rgba(245, 238, 230, 0.82);
-    max-width: 640px;
-  }
+ 
 
   .table-card {
     position: relative;
     z-index: 1;
-  }
-
-  .solve-row {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    flex-wrap: wrap;
-    position: relative;
-    z-index: 1;
-  }
-
-  .solve-progress {
-    appearance: none;
-    flex: 1 1 220px;
-    height: 10px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
-    overflow: hidden;
-    position: relative;
-    z-index: 1;
-    border: none;
-    opacity: 0.4;
-    transition: opacity 200ms ease;
-  }
-
-  .solve-progress::-webkit-progress-bar {
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-  }
-
-  .solve-progress::-webkit-progress-value {
-    background: linear-gradient(
-      90deg,
-      rgba(255, 166, 107, 0.2),
-      rgba(255, 166, 107, 0.8)
-    );
-    border-radius: 999px;
-  }
-
-  .solve-progress::-moz-progress-bar {
-    background: linear-gradient(
-      90deg,
-      rgba(255, 166, 107, 0.2),
-      rgba(255, 166, 107, 0.8)
-    );
-    border-radius: 999px;
-  }
-
-  .solve-progress.is-active {
-    opacity: 1;
-  }
-
-  .solve-progress.is-active::-webkit-progress-value {
-    background-size: 200% 100%;
-    animation: solveIndeterminate 1.2s linear infinite;
-  }
-
-  .solve-progress.is-active::-moz-progress-bar {
-    background-size: 200% 100%;
-    animation: solveIndeterminate 1.2s linear infinite;
-  }
-
-  @keyframes solveIndeterminate {
-    0% {
-      background-position: 200% 0;
-    }
-    100% {
-      background-position: -200% 0;
-    }
-  }
-
-  .solve-actions {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .btn {
-    border-radius: 999px;
-    padding: 12px 22px;
-    font-weight: 600;
-    font-size: 0.9rem;
-    text-decoration: none;
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    background: rgba(255, 255, 255, 0.06);
-    color: #f5f0e8;
-    cursor: pointer;
-    transition:
-      transform 160ms ease,
-      box-shadow 160ms ease,
-      border 160ms ease;
-  }
-
-  .btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
-  }
-
-  .btn-primary {
-    background: #ffa66b;
-    color: #2a1a16;
-    border-color: transparent;
-    box-shadow: 0 18px 40px rgba(255, 166, 107, 0.3);
-  }
-
-  .btn-primary:hover {
-    box-shadow: 0 24px 48px rgba(255, 166, 107, 0.4);
   }
 
   .table-shell {

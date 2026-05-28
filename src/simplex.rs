@@ -10,6 +10,7 @@ pub enum SolvePhase {
 pub enum SnapshotKind {
     BeforePivot,
     AfterPivot,
+    Cut,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +27,13 @@ pub struct SolveStep {
     pub pivot_row: usize,
     pub pivot_col: usize,
     pub snapshot: SimplexSnapshot,
+    pub cut: Option<Cut>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Cut {
+    pub rhs: Fraction,
+    pub coeffs: Vec<Fraction>,
 }
 
 #[derive(Debug, Clone, Default)]

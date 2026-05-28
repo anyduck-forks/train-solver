@@ -6,6 +6,7 @@ use crate::{
     model::{ConstraintType as CoreConstraintType, Model as CoreModel, ObjectiveType as CoreObjectiveType},
     number::Number,
     simplex::{SimplexSnapshot, SimplexStatus, SnapshotKind, SolveLog, SolvePhase, SolveStep},
+    simplex::Cut as CoreCut,
 };
 
 #[wasm_bindgen]
@@ -154,6 +155,8 @@ struct SolveStepDto {
     pivot_row: usize,
     pivot_col: usize,
     snapshot: SimplexSnapshotDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cut: Option<CutDto>,
 }
 
 impl From<SolveStep> for SolveStepDto {
@@ -164,6 +167,7 @@ impl From<SolveStep> for SolveStepDto {
             pivot_row: value.pivot_row,
             pivot_col: value.pivot_col,
             snapshot: SimplexSnapshotDto::from(value.snapshot),
+            cut: value.cut.map(CutDto::from),
         }
     }
 }
@@ -189,6 +193,7 @@ impl From<SolvePhase> for SolvePhaseDto {
 enum SnapshotKindDto {
     BeforePivot,
     AfterPivot,
+    Cut,
 }
 
 impl From<SnapshotKind> for SnapshotKindDto {
@@ -196,10 +201,25 @@ impl From<SnapshotKind> for SnapshotKindDto {
         match value {
             SnapshotKind::BeforePivot => SnapshotKindDto::BeforePivot,
             SnapshotKind::AfterPivot => SnapshotKindDto::AfterPivot,
+            SnapshotKind::Cut => SnapshotKindDto::Cut,
         }
     }
 }
 
+#[derive(Serialize)]
+struct CutDto {
+    coeffs: Vec<FractionDto>,
+    rhs: FractionDto,
+}
+
+impl From<CoreCut> for CutDto {
+    fn from(value: CoreCut) -> Self {
+        Self {
+            coeffs: value.coeffs.into_iter().map(FractionDto::from).collect(),
+            rhs: FractionDto::from(value.rhs),
+        }
+    }
+}
 #[derive(Serialize)]
 struct SimplexSnapshotDto {
     tableau: TableauDto,

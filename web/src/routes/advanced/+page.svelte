@@ -11,10 +11,19 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
-  import { advancedEditor, editorSource, solveAndStore } from '$lib/solverState';
+  import SolveActions from '$lib/components/SolveActions.svelte';
+  import {
+    advancedEditor,
+    editorSource,
+    resetAdvancedFromMain,
+    solveAndStore,
+  } from '$lib/solverState';
+    import Hero from '$lib/components/Hero.svelte';
 
+  resetAdvancedFromMain();
   const initial = get(advancedEditor);
 
+  let objectiveType = $state<'Maximize' | 'Minimize'>(initial.objectiveType);
   let variables = $state(initial.variables.map((variable) => ({ ...variable })));
   let objective = $state([...initial.objective]);
   let constraints = $state(
@@ -26,10 +35,23 @@
 
   let isSolving = $state(false);
 
+  const normalizeVariables = () =>
+    variables.map((variable, index) => ({
+      ...variable,
+      name: `x${index + 1}`,
+    }));
+
   $effect(() => {
+    const normalized = normalizeVariables();
+    if (normalized.some((variable, index) => variable.name !== variables[index].name)) {
+      variables = normalized;
+      return;
+    }
+
     editorSource.set('advanced');
     advancedEditor.set({
-      variables: variables.map((variable) => ({ ...variable })),
+      objectiveType,
+      variables: normalized,
       objective: [...objective],
       constraints: constraints.map((constraint) => ({
         ...constraint,
@@ -40,7 +62,10 @@
 
   const addVariable = () => {
     const nextIndex = variables.length + 1;
-    variables = [...variables, { id: Date.now(), name: `x${nextIndex}` }];
+    variables = [
+      ...variables,
+      { id: Date.now(), name: `x${nextIndex}`, isInteger: false },
+    ];
     objective = [...objective, '0'];
     constraints = constraints.map((row) => ({ ...row, coeffs: [...row.coeffs, '0'] }));
   };
@@ -85,21 +110,16 @@
 </script>
 
 <section class="page">
-  <header class="hero">
-    <div>
-      <p class="kicker">page 3 · advanced entry</p>
-      <h1>ММДО: лінійне програмування</h1>
-      <p class="lead">
-        Введіть коефіцієнти для цільової функції та обмежень. Додавайте змінні й обмеження
-        кнопками «+», видаляйте — хрестиком при наведенні.
-      </p>
-    </div>
-    <a class="cta" href="/">Назад до таблиці</a>
-  </header>
-
+  <Hero kicker="ММДО · Ввід даних">Лінійне програмування</Hero>
   <div class="panel">
     <div class="panel-head">
-      <h2>Цільова функція (max)</h2>
+      <div class="objective-head">
+        <h2>Цільова функція</h2>
+        <select class="sign" bind:value={objectiveType} aria-label="Тип цільової функції">
+          <option value="Maximize">max</option>
+          <option value="Minimize">min</option>
+        </select>
+      </div>
       <button class="ghost" type="button" onclick={addVariable}>+ Додати змінну</button>
     </div>
 
@@ -112,16 +132,12 @@
               type="text"
               bind:value={objective[index]}
               inputmode="decimal"
-              aria-label={`Коефіцієнт ${variable.name}`}
+              aria-label={`Коефіцієнт x${index + 1}`}
             />
             <span class="mul">×</span>
             <div class="var-chip">
-              <input
-                class="var"
-                type="text"
-                bind:value={variables[index].name}
-                aria-label="Назва змінної"
-              />
+              <span class="var-label-fixed">x{index + 1}</span>
+              
               <button
                 class="remove"
                 type="button"
@@ -138,9 +154,23 @@
         {/each}
       </div>
     </div>
-  </div>
+  <!-- </div>
 
-  <div class="panel">
+  <div class="panel"> -->
+    <div class="panel-head">
+      <h2>Цілочисельні обмеження</h2>
+    </div>
+    <div class="integer-grid">
+      {#each variables as variable, index}
+        <label class="int-row">
+          <span>x{index + 1} ∈ Z</span>
+          <input type="checkbox" bind:checked={variables[index].isInteger} />
+        </label>
+      {/each}
+    </div>
+  <!-- </div>
+
+  <div class="panel"> -->
     <div class="panel-head">
       <h2>Обмеження</h2>
       <button class="ghost" type="button" onclick={addConstraint}>+ Додати обмеження</button>
@@ -158,10 +188,10 @@
                     type="text"
                     bind:value={constraint.coeffs[index]}
                     inputmode="decimal"
-                    aria-label={`Коефіцієнт ${variable.name}`}
+                    aria-label={`Коефіцієнт x${index + 1}`}
                   />
                   <span class="mul">×</span>
-                  <span class="var-label">{variable.name}</span>
+                  <span class="var-label">x{index + 1}</span>
                   {#if index < variables.length - 1}
                     <span class="plus">+</span>
                   {/if}
@@ -197,11 +227,12 @@
     </div>
   </div>
 
-  <div class="panel actions-panel">
-    <button class="cta solve-btn" type="button" onclick={startSolve} disabled={isSolving}>
-      {isSolving ? 'Розв’язання...' : 'Розв’язати'}
-    </button>
-  </div>
+  <SolveActions
+    {isSolving}
+    onSolve={startSolve}
+    secondaryHref="/"
+    secondaryLabel="Назад до таблиці"
+  />
 </section>
 
 <style>
@@ -214,11 +245,12 @@
 
   .page {
     min-height: 100vh;
-    padding: 8vh 7vw 12vh;
+    padding: 6vh 6vw 8vh;
     display: grid;
-    gap: 28px;
+    gap: 18px;
     position: relative;
     overflow: hidden;
+    align-content: start;
   }
 
   .page::before,
@@ -244,57 +276,12 @@
     background: radial-gradient(circle, rgba(255, 196, 120, 0.25), rgba(255, 196, 120, 0));
   }
 
-  .hero {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .kicker {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.3em;
-    color: rgba(175, 213, 246, 0.75);
-    margin: 0 0 8px;
-  }
-
-  h1 {
-    margin: 0 0 10px;
-    font-size: clamp(2.4rem, 3.6vw, 3.6rem);
-  }
-
-  .lead {
-    margin: 0;
-    font-size: 1.05rem;
-    color: rgba(220, 232, 245, 0.8);
-    max-width: 700px;
-  }
-
-  .cta {
-    align-self: flex-start;
-    padding: 12px 22px;
-    border-radius: 999px;
-    background: #7fd0ff;
-    color: #0c1824;
-    font-weight: 600;
-    text-decoration: none;
-    box-shadow: 0 18px 40px rgba(127, 208, 255, 0.3);
-    transition: transform 160ms ease, box-shadow 160ms ease;
-  }
-
-  .cta:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 24px 48px rgba(127, 208, 255, 0.4);
-  }
-
   .panel {
     position: relative;
     z-index: 1;
     background: rgba(14, 20, 32, 0.82);
-    border-radius: 22px;
-    padding: 22px;
+    border-radius: 16px;
+    padding: 14px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(10px);
@@ -305,20 +292,27 @@
     flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 14px;
+    gap: 8px;
+    margin-bottom: 1rem;
+    margin-top: 1rem;
+  }
+
+  .objective-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
   h2 {
     margin: 0;
-    font-size: 1.2rem;
+    font-size: 1rem;
   }
 
   .ghost {
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.15);
     color: #f1f4f9;
-    padding: 10px 16px;
+    padding: 7px 12px;
     border-radius: 999px;
     font-weight: 600;
     cursor: pointer;
@@ -336,26 +330,27 @@
 
   .equation {
     display: inline-flex;
-    gap: 12px;
+    gap: 8px;
     align-items: center;
-    padding: 6px 0;
-    min-width: 600px;
+    padding: 2px 0;
+    min-width: 520px;
   }
 
   .term {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
 
   .coef {
-    width: 80px;
-    padding: 8px 10px;
-    border-radius: 10px;
+    width: 62px;
+    padding: 4px 6px;
+    border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.04);
     color: #f1f4f9;
     font-family: 'Literata', serif;
+    font-size: 0.82rem;
   }
 
   .mul,
@@ -367,18 +362,33 @@
   .var-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 8px;
-    border-radius: 12px;
+    gap: 5px;
+    padding: 3px 5px;
+    border-radius: 10px;
     background: rgba(255, 255, 255, 0.08);
   }
 
-  .var {
-    width: 56px;
-    background: transparent;
-    border: none;
-    color: #f1f4f9;
-    font-weight: 600;
+  .var-label-fixed {
+    min-width: 24px;
+    font-weight: 700;
+    color: rgba(230, 242, 255, 0.92);
+    text-align: center;
+  }
+
+  .integer-grid {
+    display: grid;
+    gap: 6px;
+  }
+
+  .int-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .var-label {
@@ -395,30 +405,27 @@
     display: grid;
     grid-template-columns: 1fr auto auto auto;
     gap: 12px;
-    /* align-items: center; */
-    /* padding: 14px 12px; */
-    /* border-radius: 16px; */
-    /* background: rgba(9, 12, 20, 0.6); */
-    /* border: 1px solid rgba(255, 255, 255, 0.08); */
   }
 
   .sign {
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.12);
     color: #f1f4f9;
-    padding: 8px 10px;
-    border-radius: 10px;
+    padding: 4px 6px;
+    border-radius: 8px;
     font-weight: 600;
+    font-size: 0.82rem;
   }
 
   .rhs {
-    width: 100px;
-    padding: 8px 10px;
-    border-radius: 10px;
+    width: 76px;
+    padding: 4px 6px;
+    border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.04);
     color: #f1f4f9;
     font-family: 'Literata', serif;
+    font-size: 0.82rem;
   }
 
   .remove {
@@ -444,8 +451,7 @@
   }
 
   .coef:focus,
-  .rhs:focus,
-  .var:focus {
+  .rhs:focus {
     outline: 2px solid rgba(127, 208, 255, 0.7);
     outline-offset: 2px;
   }
