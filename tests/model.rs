@@ -164,31 +164,29 @@ fn lab8_maks() {
 
 #[test]
 fn lab8_maks2() {
-    let mut model = Model::new(ObjectiveType::Minimize);
-    model.add_variable(false, 0);
-    model.add_variable(false, 0);
-    model.add_variable(false, 0);
-    model.add_variable(false, 0);
-    model.add_variable(false, 0);
+    let mut model = Model::new(ObjectiveType::Maximize);
+    model.add_variable(true, 658);
+    model.add_variable(true, 6024);
 
-    model.add_constraint(vec![-2, 0, 1, 1, -1], ConstraintType::LessEq, -1);
-    model.add_constraint(vec![0, -2, 2, 1, -1], ConstraintType::LessEq, -2);
-    model.add_constraint(vec![1, 2, 0, 0, 0], ConstraintType::LessEq, 16);
-    model.add_constraint(vec![1, 1, 0, 0, 0], ConstraintType::Eq, 8);
+
+    model.add_constraint(vec![1, 1], ConstraintType::LessEq, 12);
+    model.add_constraint(vec![1, 0], ConstraintType::LessEq, 18);
+    model.add_constraint(vec![5, 100], ConstraintType::LessEq, 89);
+    model.add_constraint(vec![6, 4], ConstraintType::LessEq, 79);
+    model.add_constraint(vec![4, 2], ConstraintType::LessEq, 35);
+
 
     let result = train_solver::solve(&model);
 
-    let x1 = Fraction::new(15, 4);
-    let x2 = Fraction::new(17, 4);
-    let x3 = Fraction::from(0);
-    let x4 = Fraction::from(0);
-    let x5 = Fraction::new(13, 2);
-    let target = Fraction::from(0);
+    let x1 = Fraction::from(8);
+    let x2 = Fraction::from(0);
+    let target = Fraction::from(5264);
 
     match result {
         train_solver::simplex::SimplexStatus::Optimal { value, vars, log } => {
-            assert_eq!(vars, vec![x1, x2, x3, x4, x5]);
+            assert_eq!(vars, vec![x1, x2]);
             assert_eq!(value, target.into());
+            eprintln!("{:?}", log);
             assert_pivot_log_shape(&log);
         }
         _ => panic!("Expected optimal solution, got {:?}", result),
