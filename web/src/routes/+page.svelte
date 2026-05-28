@@ -1,40 +1,50 @@
-<script>
-  let columns = $state([
-    "Парк вагонів",
-    "К-сть пасажирів",
-    "Швидкий",
-    "Пасажирський",
-  ]);
-  let rows = $state([
-    { id: 1, name: "Багажний", values: ["12", "0", "1", "1"] },
-    { id: 2, name: "Поштовий", values: ["18", "0", "1", "0"] },
-    { id: 3, name: "Жорсткий", values: ["89", "58", "5", "8"] },
-    { id: 4, name: "Купейний", values: ["79", "40", "6", "4"] },
-    { id: 5, name: "Мʼякий", values: ["35", "32", "4", "2"] },
-  ]);
+<script lang="ts">
+  import { goto } from '$app/navigation';
+  import { get } from 'svelte/store';
+  import { editorSource, mainEditor, solveAndStore } from '$lib/solverState';
+
+  type Row = { id: number; name: string; values: string[] };
+
+  const initial = get(mainEditor);
+
+  let columns = $state<string[]>([...initial.columns]);
+  let rows = $state<Row[]>(
+    initial.rows.map((row) => ({
+      ...row,
+      values: row.values.map((value) => `${value}`),
+    })),
+  );
   let isSolving = $state(false);
 
-  /** @param {number} index */
-  const addRowAt = (index) => {
+  $effect(() => {
+    editorSource.set('main');
+    mainEditor.set({
+      columns: [...columns],
+      rows: rows.map((row) => ({
+        ...row,
+        values: row.values.map((value) => Number(value) || 0),
+      })),
+    });
+  });
+
+  const addRowAt = (index: number) => {
     const nextIndex = rows.length + 1;
     const newRow = {
       id: Date.now(),
       name: `Рядок ${nextIndex}`,
-      values: columns.map(() => "0"),
+      values: columns.map(() => '0'),
     };
     rows = [...rows.slice(0, index), newRow, ...rows.slice(index)];
   };
 
   const addRowAtEnd = () => addRowAt(rows.length);
 
-  /** @param {number} id */
-  const removeRow = (id) => {
+  const removeRow = (id: number) => {
     if (rows.length <= 1) return;
     rows = rows.filter((row) => row.id !== id);
   };
 
-  /** @param {number} index */
-  const addColumnAt = (index) => {
+  const addColumnAt = (index: number) => {
     const nextIndex = columns.length + 1;
     columns = [
       ...columns.slice(0, index),
@@ -43,14 +53,13 @@
     ];
     rows = rows.map((row) => ({
       ...row,
-      values: [...row.values.slice(0, index), "0", ...row.values.slice(index)],
+      values: [...row.values.slice(0, index), '0', ...row.values.slice(index)],
     }));
   };
 
   const addColumnAtEnd = () => addColumnAt(columns.length);
 
-  /** @param {number} index */
-  const removeColumn = (index) => {
+  const removeColumn = (index: number) => {
     if (columns.length <= 2 || index < 2) return;
     columns = columns.filter((_, i) => i !== index);
     rows = rows.map((row) => ({
@@ -59,12 +68,15 @@
     }));
   };
 
-  const startSolve = () => {
+  const startSolve = async () => {
     if (isSolving) return;
     isSolving = true;
-    setTimeout(() => {
+    try {
+      await solveAndStore('main');
+      await goto('/log');
+    } finally {
       isSolving = false;
-    }, 1800);
+    }
   };
 </script>
 
@@ -179,7 +191,7 @@
       aria-label="Розв’язання"
     ></progress>
     <div class="solve-actions">
-      <a class="btn btn-secondary" href="/advanced-entry">Розширене введення</a>
+      <a class="btn btn-secondary" href="/advanced">Розширене введення</a>
       <button class="btn btn-primary" type="button" onclick={startSolve}>
         Розв’язати
       </button>

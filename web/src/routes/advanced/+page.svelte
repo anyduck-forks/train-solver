@@ -8,16 +8,35 @@
   />
 </svelte:head>
 
-<script>
-  let variables = $state([
-    { id: 1, name: 'x1' },
-    { id: 2, name: 'x2' }
-  ]);
-  let objective = $state(['0', '0']);
-  let constraints = $state([
-    { id: 1, coeffs: ['0', '0'], sign: '<=', rhs: '0' },
-    { id: 2, coeffs: ['0', '0'], sign: '>=', rhs: '0' }
-  ]);
+<script lang="ts">
+  import { goto } from '$app/navigation';
+  import { get } from 'svelte/store';
+  import { advancedEditor, editorSource, solveAndStore } from '$lib/solverState';
+
+  const initial = get(advancedEditor);
+
+  let variables = $state(initial.variables.map((variable) => ({ ...variable })));
+  let objective = $state([...initial.objective]);
+  let constraints = $state(
+    initial.constraints.map((constraint) => ({
+      ...constraint,
+      coeffs: [...constraint.coeffs],
+    })),
+  );
+
+  let isSolving = $state(false);
+
+  $effect(() => {
+    editorSource.set('advanced');
+    advancedEditor.set({
+      variables: variables.map((variable) => ({ ...variable })),
+      objective: [...objective],
+      constraints: constraints.map((constraint) => ({
+        ...constraint,
+        coeffs: [...constraint.coeffs],
+      })),
+    });
+  });
 
   const addVariable = () => {
     const nextIndex = variables.length + 1;
@@ -26,8 +45,7 @@
     constraints = constraints.map((row) => ({ ...row, coeffs: [...row.coeffs, '0'] }));
   };
 
-  /** @param {number} index */
-  const removeVariable = (index) => {
+  const removeVariable = (index: number) => {
     if (variables.length <= 1) return;
     variables = variables.filter((_, i) => i !== index);
     objective = objective.filter((_, i) => i !== index);
@@ -49,10 +67,20 @@
     ];
   };
 
-  /** @param {number} id */
-  const removeConstraint = (id) => {
+  const removeConstraint = (id: number) => {
     if (constraints.length <= 1) return;
     constraints = constraints.filter((row) => row.id !== id);
+  };
+
+  const startSolve = async () => {
+    if (isSolving) return;
+    isSolving = true;
+    try {
+      await solveAndStore('advanced');
+      await goto('/log');
+    } finally {
+      isSolving = false;
+    }
   };
 </script>
 
@@ -66,7 +94,7 @@
         кнопками «+», видаляйте — хрестиком при наведенні.
       </p>
     </div>
-    <a class="cta" href="/page2">Назад до таблиці</a>
+    <a class="cta" href="/">Назад до таблиці</a>
   </header>
 
   <div class="panel">
@@ -167,6 +195,12 @@
         </div>
       {/each}
     </div>
+  </div>
+
+  <div class="panel actions-panel">
+    <button class="cta solve-btn" type="button" onclick={startSolve} disabled={isSolving}>
+      {isSolving ? 'Розв’язання...' : 'Розв’язати'}
+    </button>
   </div>
 </section>
 

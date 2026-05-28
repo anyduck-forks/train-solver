@@ -51,6 +51,7 @@ async function fetchModelPoints(url: string): Promise<ModelData> {
   }
 
   let colors: Float32Array | null = null;
+  console.log(`Model ${url}: ${count} points, colors: ${hasColors}`);
   if (hasColors) {
     colors = new Float32Array(count * 3);
     for (let i = 0; i < count * 3; i++) {

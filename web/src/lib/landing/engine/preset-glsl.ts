@@ -114,7 +114,9 @@ export const PRESET_GLSL = /* glsl */ `
     float scale = c0;
     float spin = c1;
     float shimmer = c2;
-    float rotZ = c3 * 0.01745329;
+    float rotX = c3 * 0.01745329;
+    float rotY = c4 * 0.01745329;
+    float rotZ = c5 * 0.01745329;
 
     float angle = time * spin;
     float cosA = cos(angle), sinA = sin(angle);
@@ -124,14 +126,26 @@ export const PRESET_GLSL = /* glsl */ `
     float my = mp.y * scale;
     float mz = mp.z * scale;
 
-    float px = mx * cosA - mz * sinA;
-    float py = my;
-    float pz = mx * sinA + mz * cosA;
+    float px = mx * cosA - my * sinA;
+    float py = mx * sinA + my * cosA;
+    float pz = mz;
+
+    float cx = cos(rotX), sx = sin(rotX);
+    float t1y = py * cx - pz * sx;
+    float t1z = py * sx + pz * cx;
+    py = t1y; pz = t1z;
+
+    float cy = cos(rotY), sy = sin(rotY);
+    float t2x = px * cy + pz * sy;
+    float t2z = -px * sy + pz * cy;
+    px = t2x; pz = t2z;
 
     float cz = cos(rotZ), sz = sin(rotZ);
-    float qx = px * cz - py * sz;
-    float qy = px * sz + py * cz;
-    pos = vec3(qx, qy, pz);
+    float t3x = px * cz - py * sz;
+    float t3y = px * sz + py * cz;
+    px = t3x; py = t3y;
+
+    pos = vec3(px, py, pz);
 
     float height = mp.y * 0.5 + 0.5;
     float pulse = 1.0 + shimmer * 0.1 * sin(time * 2.5 + fi * 0.02);

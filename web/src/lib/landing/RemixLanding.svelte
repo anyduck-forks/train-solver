@@ -153,6 +153,8 @@
   let labels = $state<ProjectedLabel[]>([]);
   let labelOpacity = $state(0);
   let controlList = $state<ControlDef[]>([]);
+  let cameraOffset = $state({ x: 0, y: 0, z: 0 });
+  let cameraTargetOffset = $state({ x: 0, y: 0, z: 0 });
 
   const morphValueRef = { current: 0 };
   let targetPreset = $state<number | null>(null);
@@ -416,9 +418,15 @@
 
       let separation: number;
 
+      const nearest = Math.round(clamp(morphValue, 0, maxValue));
+
       if (blend < 0.001) {
         copyControlsInto(presetData.controls[fromIndex], scratchControlsA);
         copyControlsInto(presetData.controls[fromIndex], scratchControlsB);
+        if (presets[nearest]) {
+          copyManagedControlsInto(presets[nearest], labelControlMgr, scratchControlsA);
+          copyManagedControlsInto(presets[nearest], labelControlMgr, scratchControlsB);
+        }
         separation = presets[fromIndex].separation;
       } else {
         copyControlsInto(presetData.controls[fromIndex], scratchControlsA);
@@ -535,12 +543,19 @@
         desiredCameraPos,
         desiredCameraTarget,
       );
+      const camPosX = desiredCameraPos.x + cameraOffset.x;
+      const camPosY = desiredCameraPos.y + cameraOffset.y;
+      const camPosZ = desiredCameraPos.z + cameraOffset.z;
+      const camTargetX = desiredCameraTarget.x + cameraTargetOffset.x;
+      const camTargetY = desiredCameraTarget.y + cameraTargetOffset.y;
+      const camTargetZ = desiredCameraTarget.z + cameraTargetOffset.z;
+
       if (reduceMotion) {
-        engine.camera.position.copy(desiredCameraPos);
-        engine.controls.target.copy(desiredCameraTarget);
+        engine.camera.position.set(camPosX, camPosY, camPosZ);
+        engine.controls.target.set(camTargetX, camTargetY, camTargetZ);
       } else {
-        engine.camera.position.lerp(desiredCameraPos, CAM_LERP_SPEED);
-        engine.controls.target.lerp(desiredCameraTarget, CAM_LERP_SPEED);
+        engine.camera.position.lerp(new Vector3(camPosX, camPosY, camPosZ), CAM_LERP_SPEED);
+        engine.controls.target.lerp(new Vector3(camTargetX, camTargetY, camTargetZ), CAM_LERP_SPEED);
       }
 
       const parallaxScale = 1 - driveProximity;
@@ -588,7 +603,6 @@
       mouseSim.step(dtSeconds);
       particles.setDispTexture(mouseSim.getDispTexture());
 
-      const nearest = Math.round(clamp(morphValue, 0, maxValue));
       if (nearest !== previousNearest) {
         previousNearest = nearest;
         labelControlMgr.loadPreset(presets[nearest]);
@@ -782,6 +796,75 @@
           {/each}
         </div>
       {/if}
+      <div class="control-group">
+        <h4>Camera</h4>
+        <label class="control-item">
+          <span>Pos X</span>
+          <input
+            type="range"
+            min="-50"
+            max="50"
+            step="0.5"
+            bind:value={cameraOffset.x}
+          />
+          <strong>{cameraOffset.x.toFixed(1)}</strong>
+        </label>
+        <label class="control-item">
+          <span>Pos Y</span>
+          <input
+            type="range"
+            min="-50"
+            max="50"
+            step="0.5"
+            bind:value={cameraOffset.y}
+          />
+          <strong>{cameraOffset.y.toFixed(1)}</strong>
+        </label>
+        <label class="control-item">
+          <span>Pos Z</span>
+          <input
+            type="range"
+            min="-80"
+            max="80"
+            step="0.5"
+            bind:value={cameraOffset.z}
+          />
+          <strong>{cameraOffset.z.toFixed(1)}</strong>
+        </label>
+        <label class="control-item">
+          <span>Target X</span>
+          <input
+            type="range"
+            min="-30"
+            max="30"
+            step="0.5"
+            bind:value={cameraTargetOffset.x}
+          />
+          <strong>{cameraTargetOffset.x.toFixed(1)}</strong>
+        </label>
+        <label class="control-item">
+          <span>Target Y</span>
+          <input
+            type="range"
+            min="-30"
+            max="30"
+            step="0.5"
+            bind:value={cameraTargetOffset.y}
+          />
+          <strong>{cameraTargetOffset.y.toFixed(1)}</strong>
+        </label>
+        <label class="control-item">
+          <span>Target Z</span>
+          <input
+            type="range"
+            min="-30"
+            max="30"
+            step="0.5"
+            bind:value={cameraTargetOffset.z}
+          />
+          <strong>{cameraTargetOffset.z.toFixed(1)}</strong>
+        </label>
+      </div>
     </aside>
   {/if}
 
@@ -894,6 +977,20 @@
   .control-list {
     display: grid;
     gap: 12px;
+  }
+
+  .control-group {
+    margin-top: 16px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .control-group h4 {
+    margin: 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: rgba(220, 232, 245, 0.7);
   }
 
   .control-item {
