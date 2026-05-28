@@ -124,6 +124,8 @@ pub fn solve(model: &model::Model) -> simplex::SimplexStatus {
         }
 
         let mut cut_added = false;
+        let mut max_fract_row: Option<usize> = None;
+        let mut max_fract = Fraction::from(0);
 
         for (var_idx, _) in model
             .variables
@@ -134,15 +136,22 @@ pub fn solve(model: &model::Model) -> simplex::SimplexStatus {
             if let Some(row_idx) = tableau.basic_vars.iter().position(|&j| j == var_idx) {
                 let val = tableau.matrix[row_idx][0];
                 if !val.is_integer() {
-                    let (rhs, coeffs) = tableau.add_gomory_cut(row_idx);
-                    let should_log_snapshot = pivot_iteration < SNAPSHOT_ITERATION_LIMIT;
-                    if should_log_snapshot {
-                        push_cut_snapshot(&mut log, &tableau, rhs, coeffs.clone());
+                    let fract = val.fract();
+                    if max_fract_row.is_none() || fract > max_fract {
+                        max_fract = fract;
+                        max_fract_row = Some(row_idx);
                     }
-                    cut_added = true;
-                    break;
                 }
             }
+        }
+
+        if let Some(row_idx) = max_fract_row {
+            let (rhs, coeffs) = tableau.add_gomory_cut(row_idx);
+            let should_log_snapshot = pivot_iteration < SNAPSHOT_ITERATION_LIMIT;
+            if should_log_snapshot {
+                push_cut_snapshot(&mut log, &tableau, rhs, coeffs.clone());
+            }
+            cut_added = true;
         }
 
         if !cut_added {
