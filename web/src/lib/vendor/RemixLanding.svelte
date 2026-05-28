@@ -14,9 +14,8 @@
   import { createModelTexture } from "./engine/model-texture.ts";
   import { loadModelPoints, type ModelData } from "./engine/model-loader.ts";
   import { presets } from "./engine/presets.ts";
-  import { DEFAULT_SETTINGS, type ControlDef, type Preset, type ShaderId } from "./engine/types.ts";
+  import { DEFAULT_SETTINGS, type Preset, type ShaderId } from "./engine/types.ts";
   import { clamp, clamp01, lerp } from "./utils/math.ts";
-  import { initReducedMotion, reducedMotion } from "./utils/reduced-motion.ts";
 
   let { presetIndex = null, showContent = false } = $props();
 
@@ -132,7 +131,6 @@
   const appliedModelSlots = new Set<number>();
   let frameId = 0;
   let startTime = 0;
-  let frozenTime: number | null = null;
   let previousNearest = -1;
   let hasReportedReady = false;
   let initFailed = false;
@@ -152,9 +150,6 @@
 
   let labels = $state<ProjectedLabel[]>([]);
   let labelOpacity = $state(0);
-  let controlList = $state<ControlDef[]>([]);
-  let cameraOffset = $state({ x: 0, y: 0, z: 0 });
-  let cameraTargetOffset = $state({ x: 0, y: 0, z: 0 });
 
   const morphValueRef = { current: 0 };
   let targetPreset = $state<number | null>(null);
@@ -350,60 +345,45 @@
       const morphValue = transitionActive
         ? lerp(transitionFrom, transitionTo, transitionBlend)
         : activePreset;
-      const reduceMotion = reducedMotion.current;
-
-      if (reduceMotion) {
-        frozenTime ??= Math.max(time, PARTICLE_INTRO_DELAY_S + 3.5);
-      } else {
-        frozenTime = null;
-      }
-      const visualTime = frozenTime ?? time;
+      const visualTime = time;
 
       engine.updateSettings(settings);
 
       const screenScale = engine.getScreenScale();
       particles.setPointSize(settings.pointSize);
       particles.setHdrIntensity(settings.hdrIntensity * screenScale);
-      const effectiveMouseNormX = reduceMotion ? 0 : mouseNormX;
-      const effectiveMouseNormY = reduceMotion ? 0 : mouseNormY;
+      const effectiveMouseNormX = mouseNormX;
+      const effectiveMouseNormY = mouseNormY;
 
       let mouseBrushFactor = 0;
       const dtClamp = Math.max(dtSeconds, 1e-4);
-      if (reduceMotion) {
-        mouseVelPrimed = false;
-        mouseNdcSpeedSmoothed = 0;
-        mouseBrushSmoothed = 0;
-      } else {
-        if (!mouseVelPrimed) {
-          prevMouseNormX = effectiveMouseNormX;
-          prevMouseNormY = effectiveMouseNormY;
-          mouseVelPrimed = true;
-        } else {
-          const speed = Math.hypot(
-            (effectiveMouseNormX - prevMouseNormX) / dtClamp,
-            (effectiveMouseNormY - prevMouseNormY) / dtClamp,
-          );
-          const kVel = 1 - Math.exp(-MOUSE_SIM_VEL_SMOOTH_TAU * dtClamp);
-          mouseNdcSpeedSmoothed += (speed - mouseNdcSpeedSmoothed) * kVel;
-        }
+      if (!mouseVelPrimed) {
         prevMouseNormX = effectiveMouseNormX;
         prevMouseNormY = effectiveMouseNormY;
-        const span = Math.max(MOUSE_SIM_VEL_FULL - MOUSE_SIM_VEL_GATE, 1e-4);
-        const linear = clamp01(
-          (mouseNdcSpeedSmoothed - MOUSE_SIM_VEL_GATE) / span,
+        mouseVelPrimed = true;
+      } else {
+        const speed = Math.hypot(
+          (effectiveMouseNormX - prevMouseNormX) / dtClamp,
+          (effectiveMouseNormY - prevMouseNormY) / dtClamp,
         );
-        const brushTarget = linear * linear * (3 - 2 * linear);
-        const kBrush = 1 - Math.exp(-MOUSE_SIM_BRUSH_SMOOTH_TAU * dtClamp);
-        mouseBrushSmoothed += (brushTarget - mouseBrushSmoothed) * kBrush;
-        mouseBrushFactor = mouseBrushSmoothed;
+        const kVel = 1 - Math.exp(-MOUSE_SIM_VEL_SMOOTH_TAU * dtClamp);
+        mouseNdcSpeedSmoothed += (speed - mouseNdcSpeedSmoothed) * kVel;
       }
+      prevMouseNormX = effectiveMouseNormX;
+      prevMouseNormY = effectiveMouseNormY;
+      const span = Math.max(MOUSE_SIM_VEL_FULL - MOUSE_SIM_VEL_GATE, 1e-4);
+      const linear = clamp01(
+        (mouseNdcSpeedSmoothed - MOUSE_SIM_VEL_GATE) / span,
+      );
+      const brushTarget = linear * linear * (3 - 2 * linear);
+      const kBrush = 1 - Math.exp(-MOUSE_SIM_BRUSH_SMOOTH_TAU * dtClamp);
+      mouseBrushSmoothed += (brushTarget - mouseBrushSmoothed) * kBrush;
+      mouseBrushFactor = mouseBrushSmoothed;
 
       particles.setColorMode(settings.colorMode);
       particles.setDof(settings.dofAmount, settings.dofFocus);
       const introTime = Math.max(0, visualTime - PARTICLE_INTRO_DELAY_S);
-      particles.setIntroProgress(
-        reduceMotion ? 1.5 : Math.min(introTime / 3.5, 1.5),
-      );
+      particles.setIntroProgress(Math.min(introTime / 3.5, 1.5));
       particles.setTime(visualTime);
 
       const maxValue = presets.length - 1;
@@ -440,8 +420,7 @@
       const racetrackIndex = presetData.racetrackIndex;
       const racetrackDist =
         racetrackIndex >= 0 ? Math.abs(morphValue - racetrackIndex) : 0;
-      const departingRacetrack =
-        !reduceMotion && racetrackDist > 0.01 && racetrackDist < 1.0;
+      const departingRacetrack = racetrackDist > 0.01 && racetrackDist < 1.0;
 
       if (departingRacetrack) {
         const surge = racetrackDist * racetrackDist * 32;
@@ -480,9 +459,10 @@
       const trailBoost = departingRacetrack
         ? Math.sin(racetrackDist * Math.PI) * 0.75
         : 0;
-      engine.afterImagePass.uniforms.damp.value = reduceMotion
-        ? 0
-        : Math.min(effectiveTrail + trailBoost, 0.97);
+      engine.afterImagePass.uniforms.damp.value = Math.min(
+        effectiveTrail + trailBoost,
+        0.97,
+      );
 
       const driveIndex = presetData.driveIndex;
       const racetrackFogDist =
@@ -501,7 +481,7 @@
         racetrackIndex >= 0
           ? clamp01(1 - racetrackDist) * (1 - driveProximity)
           : 0;
-      if (!reduceMotion && driveProximity > 0) {
+      if (driveProximity > 0) {
         smoothCarLane += (effectiveMouseNormX - smoothCarLane) * CAR_LANE_LERP;
       } else {
         smoothCarLane += (0 - smoothCarLane) * CAR_LANE_LERP;
@@ -535,7 +515,7 @@
         );
       }
 
-      engine.controls.enabled = !reduceMotion && driveProximity < 0.5;
+      engine.controls.enabled = driveProximity < 0.5;
 
       setDesiredCameraInto(
         presets,
@@ -543,43 +523,42 @@
         desiredCameraPos,
         desiredCameraTarget,
       );
-      const camPosX = desiredCameraPos.x + cameraOffset.x;
-      const camPosY = desiredCameraPos.y + cameraOffset.y;
-      const camPosZ = desiredCameraPos.z + cameraOffset.z;
-      const camTargetX = desiredCameraTarget.x + cameraTargetOffset.x;
-      const camTargetY = desiredCameraTarget.y + cameraTargetOffset.y;
-      const camTargetZ = desiredCameraTarget.z + cameraTargetOffset.z;
+      const camPosX = desiredCameraPos.x;
+      const camPosY = desiredCameraPos.y;
+      const camPosZ = desiredCameraPos.z;
+      const camTargetX = desiredCameraTarget.x;
+      const camTargetY = desiredCameraTarget.y;
+      const camTargetZ = desiredCameraTarget.z;
 
-      if (reduceMotion) {
-        engine.camera.position.set(camPosX, camPosY, camPosZ);
-        engine.controls.target.set(camTargetX, camTargetY, camTargetZ);
-      } else {
-        engine.camera.position.lerp(new Vector3(camPosX, camPosY, camPosZ), CAM_LERP_SPEED);
-        engine.controls.target.lerp(new Vector3(camTargetX, camTargetY, camTargetZ), CAM_LERP_SPEED);
-      }
+      engine.camera.position.lerp(
+        new Vector3(camPosX, camPosY, camPosZ),
+        CAM_LERP_SPEED,
+      );
+      engine.controls.target.lerp(
+        new Vector3(camTargetX, camTargetY, camTargetZ),
+        CAM_LERP_SPEED,
+      );
 
       const parallaxScale = 1 - driveProximity;
       smoothMouseOffsetX +=
         (effectiveMouseNormX * MOUSE_RANGE - smoothMouseOffsetX) * MOUSE_LERP;
-      if (!reduceMotion) {
-        const parallaxUncapped = smoothMouseOffsetX * parallaxScale;
-        let parallaxX = parallaxUncapped;
-        if (racetrackIndex >= 0 && racetrackRoadLock > 0) {
-          const trackW = presetData.controls[racetrackIndex][1] ?? 40;
-          const strafeCap = trackW * RACETRACK_MOUSE_STRAFE_OF_TRACKW;
-          const parallaxRacetrack = clamp(
-            parallaxUncapped * RACETRACK_MOUSE_STRAFE_ATTENUATION,
-            -strafeCap,
-            strafeCap,
-          );
-          parallaxX = lerp(
-            parallaxUncapped,
-            parallaxRacetrack,
-            racetrackRoadLock,
-          );
-        }
-        engine.camera.position.x += parallaxX;
+      const parallaxUncapped = smoothMouseOffsetX * parallaxScale;
+      let parallaxX = parallaxUncapped;
+      if (racetrackIndex >= 0 && racetrackRoadLock > 0) {
+        const trackW = presetData.controls[racetrackIndex][1] ?? 40;
+        const strafeCap = trackW * RACETRACK_MOUSE_STRAFE_OF_TRACKW;
+        const parallaxRacetrack = clamp(
+          parallaxUncapped * RACETRACK_MOUSE_STRAFE_ATTENUATION,
+          -strafeCap,
+          strafeCap,
+        );
+        parallaxX = lerp(
+          parallaxUncapped,
+          parallaxRacetrack,
+          racetrackRoadLock,
+        );
       }
+      engine.camera.position.x += parallaxX;
 
       engine.controls.update();
       scratchViewProj.multiplyMatrices(
@@ -596,9 +575,7 @@
       mouseSim.setMorphT(morphT);
       mouseSim.setMouseNdcRadius(MOUSE_SIM_NDC_RADIUS * mouseBrushFactor);
       mouseSim.setMouseStrength(
-        reduceMotion
-          ? 0
-          : effectiveRepulsion * MOUSE_SIM_STRENGTH_SCALE * mouseBrushFactor,
+        effectiveRepulsion * MOUSE_SIM_STRENGTH_SCALE * mouseBrushFactor,
       );
       mouseSim.step(dtSeconds);
       particles.setDispTexture(mouseSim.getDispTexture());
@@ -606,7 +583,6 @@
       if (nearest !== previousNearest) {
         previousNearest = nearest;
         labelControlMgr.loadPreset(presets[nearest]);
-        controlList = Array.from(labelControlMgr.controls.values());
       }
 
       const nearestPreset = presets[nearest];
@@ -691,10 +667,6 @@
     const controller = new AbortController();
     const { signal } = controller;
 
-    initReducedMotion(signal, () => {
-      hasReportedReady = false;
-    });
-
     window.addEventListener(
       "pointermove",
       (event) => {
@@ -768,105 +740,6 @@
       {/each}
     </div>
   </div>
-
-  {#if false}
-    <aside class="control-panel">
-      <h3>Controls</h3>
-      {#if controlList.length === 0}
-        <p class="control-empty">No active preset controls.</p>
-      {:else}
-        <div class="control-list">
-          {#each controlList as control (control.id)}
-            <label class="control-item">
-              <span>{control.label}</span>
-              <input
-                type="range"
-                min={control.min}
-                max={control.max}
-                step="0.01"
-                value={control.value}
-                oninput={(event) => {
-                  const next = Number((event.currentTarget as HTMLInputElement).value);
-                  labelControlMgr.setControlValue(control.id, next);
-                  controlList = Array.from(labelControlMgr.controls.values());
-                }}
-              />
-              <strong>{control.value.toFixed(2)}</strong>
-            </label>
-          {/each}
-        </div>
-      {/if}
-      <div class="control-group">
-        <h4>Camera</h4>
-        <label class="control-item">
-          <span>Pos X</span>
-          <input
-            type="range"
-            min="-50"
-            max="50"
-            step="0.5"
-            bind:value={cameraOffset.x}
-          />
-          <strong>{cameraOffset.x.toFixed(1)}</strong>
-        </label>
-        <label class="control-item">
-          <span>Pos Y</span>
-          <input
-            type="range"
-            min="-50"
-            max="50"
-            step="0.5"
-            bind:value={cameraOffset.y}
-          />
-          <strong>{cameraOffset.y.toFixed(1)}</strong>
-        </label>
-        <label class="control-item">
-          <span>Pos Z</span>
-          <input
-            type="range"
-            min="-80"
-            max="80"
-            step="0.5"
-            bind:value={cameraOffset.z}
-          />
-          <strong>{cameraOffset.z.toFixed(1)}</strong>
-        </label>
-        <label class="control-item">
-          <span>Target X</span>
-          <input
-            type="range"
-            min="-30"
-            max="30"
-            step="0.5"
-            bind:value={cameraTargetOffset.x}
-          />
-          <strong>{cameraTargetOffset.x.toFixed(1)}</strong>
-        </label>
-        <label class="control-item">
-          <span>Target Y</span>
-          <input
-            type="range"
-            min="-30"
-            max="30"
-            step="0.5"
-            bind:value={cameraTargetOffset.y}
-          />
-          <strong>{cameraTargetOffset.y.toFixed(1)}</strong>
-        </label>
-        <label class="control-item">
-          <span>Target Z</span>
-          <input
-            type="range"
-            min="-30"
-            max="30"
-            step="0.5"
-            bind:value={cameraTargetOffset.z}
-          />
-          <strong>{cameraTargetOffset.z.toFixed(1)}</strong>
-        </label>
-      </div>
-    </aside>
-  {/if}
 
   {#if showContent}
     <main class="content">

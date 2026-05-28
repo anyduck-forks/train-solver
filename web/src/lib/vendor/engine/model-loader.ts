@@ -50,17 +50,7 @@ async function fetchModelPoints(url: string): Promise<ModelData> {
     positions[idx + 2] = minZ + ((qz + 32767) / 65534) * rangeZ;
   }
 
-  let colors: Float32Array | null = null;
-  console.log(`Model ${url}: ${count} points, colors: ${hasColors}`);
-  if (hasColors) {
-    colors = new Float32Array(count * 3);
-    for (let i = 0; i < count * 3; i++) {
-      colors[i] = view.getUint8(offset) / 255;
-      offset++;
-    }
-  }
-
-  return { positions, colors };
+  return { positions, colors: null };
 }
 
 export function loadModelPoints(url: string): Promise<ModelData> {

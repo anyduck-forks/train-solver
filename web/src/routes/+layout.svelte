@@ -1,6 +1,6 @@
 <script lang="ts">
 	import favicon from "$lib/assets/favicon.svg";
-	import RemixLanding from "$lib/landing/RemixLanding.svelte";
+	import RemixLanding from "$lib/vendor/RemixLanding.svelte";
 	import { page } from "$app/stores";
 
 	let { children } = $props();
