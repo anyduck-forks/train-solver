@@ -227,10 +227,20 @@
                   </thead>
                   <tbody>
                     {#each startStep.snapshot.tableau.matrix as row, rowIndex}
-                      <tr>
+                      <tr class={startStep.kind !== 'cut' && rowIndex === startStep.pivot_row ? 'pivot-row' : ''}>
                         <th>{tableauBasisLabel(startStep.snapshot.tableau.basic_vars[rowIndex])}</th>
-                        {#each row as cell}
-                          <td>{formatFraction(cell)}</td>
+                        {#each row as cell, colIndex}
+                          <td
+                            class={
+                              startStep.kind !== 'cut' && rowIndex === startStep.pivot_row && colIndex === startStep.pivot_col
+                                ? 'pivot-cell'
+                                : startStep.kind !== 'cut' && colIndex === startStep.pivot_col
+                                  ? 'pivot-col'
+                                  : ''
+                            }
+                          >
+                            {formatFraction(cell)}
+                          </td>
                         {/each}
                       </tr>
                     {/each}
@@ -242,6 +252,9 @@
         {/if}
         {#each pivotSteps as step, index}
           {@const cut = getCut(step)}
+          {@const nextStep = pivotSteps[index + 1]}
+          {@const nextPivotRow = nextStep?.kind !== 'cut' ? nextStep?.pivot_row : undefined}
+          {@const nextPivotCol = nextStep?.kind !== 'cut' ? nextStep?.pivot_col : undefined}
           <details
             class="trace-row"
             name="trace"
@@ -275,14 +288,14 @@
                   </thead>
                   <tbody>
                     {#each step.snapshot.tableau.matrix as row, rowIndex}
-                      <tr class={step.kind !== 'cut' && rowIndex === step.pivot_row ? 'pivot-row' : ''}>
+                      <tr class={step.kind !== 'cut' && rowIndex === nextPivotRow ? 'pivot-row' : ''}>
                         <th>{tableauBasisLabel(step.snapshot.tableau.basic_vars[rowIndex])}</th>
                         {#each row as cell, colIndex}
                           <td
                             class={
-                              step.kind !== 'cut' && rowIndex === step.pivot_row && colIndex === step.pivot_col
+                              step.kind !== 'cut' && rowIndex === nextPivotRow && colIndex === nextPivotCol
                                 ? 'pivot-cell'
-                                : step.kind !== 'cut' && colIndex === step.pivot_col
+                                : step.kind !== 'cut' && colIndex === nextPivotCol
                                   ? 'pivot-col'
                                   : ''
                             }
