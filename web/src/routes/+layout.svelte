@@ -2,13 +2,15 @@
 	import favicon from "$lib/assets/favicon.svg";
 	import RemixLanding from "$lib/vendor/RemixLanding.svelte";
 	import { page } from "$app/stores";
+	import { base } from '$app/paths';
+
 
 	let { children } = $props();
 
 	const routes = [
-		"/",
-		"/advanced",
-		"/log",
+		`${base}/`,
+		`${base}/advanced`,
+		`${base}/log`,
 	];
 
 	function getIndex(pathname: string): number {

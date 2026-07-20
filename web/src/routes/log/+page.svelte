@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
     import Hero from '$lib/components/Hero.svelte';
   import {
     solveLabels,
@@ -14,7 +15,7 @@
     advanced: 'Розширене введення',
   } as const;
 
-  const backHref = $derived($solveSource === 'advanced' ? '/advanced' : '/');
+  const backHref = $derived($solveSource === 'advanced' ? `${base}/advanced` : base);
 
   type CutDto = { coeffs: { num: number; den: number }[]; rhs: { num: number; den: number } };
 

@@ -1,3 +1,4 @@
+import { base } from '$app/paths';
 import type { Preset } from "./types.ts";
 
 
@@ -5,7 +6,7 @@ const racecar: Preset = {
   name: "Racecar",
   shaderId: "racecar",
   preloadEager: true,
-  modelUrl: "/landing/models/head.pts",
+  modelUrl: `${base}/landing/models/head.pts`,
   modelSlot: 1,
   glowColor: [0.3, 0.35, 0.55],
   separation: 0,
@@ -26,7 +27,7 @@ const racecar: Preset = {
 const kupe: Preset = {
   name: "Kupe",
   shaderId: "runner",
-  modelUrl: "/landing/models/kupe.pts",
+  modelUrl: `${base}/landing/models/kupe.pts`,
   modelSlot: 2,
   cameraPosition: [-5, 30, 80],
   cameraTarget: [0, 0, 0],
@@ -51,7 +52,7 @@ const kupe: Preset = {
 const underTheHood: Preset = {
   name: "Under The Hood",
   shaderId: "racecar",
-  modelUrl: "/landing/models/head.pts",
+  modelUrl: `${base}/landing/models/head.pts`,
   modelSlot: 1,
   cameraPosition: [0, 12, -55],
   cameraTarget: [0, -2, 0],

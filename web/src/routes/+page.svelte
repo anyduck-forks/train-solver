@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { base } from '$app/paths';
   import { get } from 'svelte/store';
   import SolveActions from '$lib/components/SolveActions.svelte';
   import Hero from '$lib/components/Hero.svelte';
@@ -75,7 +76,7 @@
     isSolving = true;
     try {
       await solveAndStore('main');
-      await goto('/log');
+      await goto(`${base}/log`);
     } finally {
       isSolving = false;
     }
@@ -187,7 +188,7 @@
   <SolveActions
     {isSolving}
     onSolve={startSolve}
-    secondaryHref="/advanced"
+    secondaryHref={`${base}/advanced`}
     secondaryLabel="Розширене введення"
   />
 </section>

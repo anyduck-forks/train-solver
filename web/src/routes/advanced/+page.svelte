@@ -11,6 +11,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
+  import { base } from '$app/paths';
   import SolveActions from '$lib/components/SolveActions.svelte';
   import {
     advancedEditor,
@@ -102,7 +103,7 @@
     isSolving = true;
     try {
       await solveAndStore('advanced');
-      await goto('/log');
+      await goto(`${base}/log`);
     } finally {
       isSolving = false;
     }
@@ -230,7 +231,7 @@
   <SolveActions
     {isSolving}
     onSolve={startSolve}
-    secondaryHref="/"
+    secondaryHref={`${base}`}
     secondaryLabel="Назад до таблиці"
   />
 </section>
