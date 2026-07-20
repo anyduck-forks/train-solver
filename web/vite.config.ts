@@ -5,8 +5,10 @@ import wasm from 'vite-plugin-wasm';
 import { defineConfig } from 'vite';
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const base = process.env.BASE_PATH ?? '/';
 
 export default defineConfig({
+	base,
 	build: { target: 'esnext' },
 	server: {
 		fs: {
